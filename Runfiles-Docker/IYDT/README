@@ -1,0 +1,46 @@
+The data supporting the IYDT analyses were simulated from data
+provided by Sean Ford of Lawrence Livermore National Laboratory
+and can be found in the Data/ directory.
+
+The Code/IYDT directory contains application-specific functions
+utilized in the IYDT analyses, including forward models for each
+phenomenology and their associated gradients.
+
+Four phenomenologies are considered: Seismic, Acoustic, Optical, and
+Crater. The first three of these were considered by Ford and
+colleagues in their work referenced below. Chemical explosions are
+used to calibrate seismic and acoustic models, while nuclear
+explosions are used to calibrate optical and crater models. The
+nuclear event "SUGAR" is considered as the "new event" whose
+yield and height-of-burst are to be predicted with uncertainty.
+
+Phenomenology-specific code filenames should be distinct from
+application-specific code filenames.
+
+Directories:
+
+Seismic/
+Acoustic/
+Optical/
+Crater/
+	Single-phenomenology analyses
+
+3-Phen/
+	MultiPEM analysis based on seismic, acoustic, and optical
+
+4-Phen/
+	MultiPEM analysis based on seismic, acoustic, optical,
+        and crater
+
+Reference:
+
+	Ford, S.R., Bulaevskaya, V., Ramirez, A., Johannesson, G.,
+	and Rodgers, A.J. (2021). Joint Bayesian inference for
+	near-surface explosion yield and height-of-burst. Journal
+	of Geophysical Research: Solid Earth, 126, e2020JB020968.
+
+NOTE: The option "iBayes = TRUE" is set by default in each of
+the "runMPEM.r" files provided for this application. This
+option runs Bayesian analyses in addition to maximum
+likelihood estimation (MLE). For faster runs, use only MLE
+by setting "iBayes = FALSE"

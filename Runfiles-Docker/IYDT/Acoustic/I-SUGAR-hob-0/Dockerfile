@@ -1,0 +1,13 @@
+#
+# Run desired Acoustic sub-analysis
+#
+
+# Use iydt/acoustic image containing required
+# R packages, global functions, IYDT-specific
+# functions and data, and acoustic-specific
+# functions
+FROM iydt/acoustic
+
+## source run file
+CMD Rscript /I-SUGAR-hob-0/runMPEM.r > /I-SUGAR-hob-0/runMPEM.out; \
+Rscript /I-SUGAR-hob-0/runMPEM_0.r > /I-SUGAR-hob-0/runMPEM_0.out

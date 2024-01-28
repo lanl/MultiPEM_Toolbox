@@ -1,0 +1,12 @@
+#
+# Run calibration Acoustic inference
+#
+
+# Use iydt/acoustic image containing required
+# R packages, global functions, IYDT-specific
+# functions and data, and acoustic-specific
+# functions
+FROM iydt/acoustic
+
+## source run file
+CMD Rscript /acoustic_cal/runMPEM.r > /I-SUGAR-hob-0/runMPEM.out
