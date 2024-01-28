@@ -1,0 +1,45 @@
+This directory will contain subdirectories for each application.
+Each analysis for a given application will be designated by
+individual subdirectories within the associated application
+directory. Each analysis directory will contain a "runMPEM.r"
+file that provides the R code that is to be run for that analysis.
+
+The Code/ directory contains functions utilized across
+applications, such as the log-likelihood, log-prior, and log-
+posterior distributions and their associated gradients.
+
+Analyses can be run by executing the following steps, assuming the
+docker software has been installed on the user's machine:
+
+1) In the MultiPEM_Toolbox_Package directory (one level up), create
+the mpem/global image using docker:
+
+% docker build -f Runfiles-Docker/Dockerfile -t mpem/global . 
+
+2) In the MultiPEM_Toolbox_Package directory, create an image
+mpem/<application> specific to the application. For example,
+for <application> = iydt, execute the commands:
+
+% docker build -f Runfiles-Docker/IYDT/Dockerfile -t mpem/iydt .
+
+The Dockerfile will need to be edited to supply application-
+specific code.
+
+3) In the analysis directory, create an image
+<application>/<analysis>. For example, for <application> =
+iydt and <analysis> = seismic, execute the commands:
+
+% cd IYDT/Seismic
+% docker build -t iydt/seismic .
+
+The Dockerfile will need to be edited to supply analysis-
+specific code.
+
+4) Run each sub-analysis from the appropriate directory. For
+example, for <application> = iydt, <analysis> = seismic, and
+<sub-analysis> = I, execute the commands:
+
+% cd IYDT/Seismic/I
+% docker build -t seismic/i .
+% docker run -it --rm -v <full path to sub-analysis directory>:\
+  <container directory for sub-analysis> -d seismic/i
