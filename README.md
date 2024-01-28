@@ -36,24 +36,30 @@ instructions on how to run single-phenomenology and MultiPEM analyses:
 Directories in this repository:
 
 Applications/
+
   Contains application-specific code, data, and verification tests
 
 Code/
+
   Contains functions utilized across applications, such as the
   log-likelihood, log-prior, and log-posterior distributions and
   their associated gradients
 
 Runfiles/
+
   Set up application directories to run MultiPEM analyses using R
 
 Runfiles-Docker/
+
   Set up application directories to run MultiPEM analyses using R
   from Docker
 
 Test/
+
   Contains code for running general verification tests using R
 
 Test-Docker/
+
   Contains code for running general verification tests using R
   from Docker
 
