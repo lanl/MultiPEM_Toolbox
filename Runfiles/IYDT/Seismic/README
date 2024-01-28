@@ -1,0 +1,46 @@
+A symbolic link to IYDT phenomenology-specific code needed for
+these analyses should be placed in this directory as follows:
+
+% ln -s ../../../Applications/Code/IYDT/Phenomenology/ Code
+
+Sub-analysis Directories:
+
+I - level 1 and 2 variance components responses 1 and 2
+I-SUGAR-hob - level 1 and 2 variance components responses 1 and 2;
+              W/HOB inference for "new event" SUGAR
+I-SUGAR-hob-pi - I-SUGAR-hob except informative prior
+                 distribution for W and HOB
+I-SUGAR-hob-0 - two-stage rapid assessment of W/HOB
+                inference for "new event" SUGAR
+I-SUGAR-hob-pi-0 - I-SUGAR-hob-0 except informative prior
+                   distribution for W and HOB
+
+If a more informed starting value for new event
+log-likelihood optimization is desired:
+1) Create an "Opt" directory
+2) After calibration sub-analysis (here, I) completes, copy
+   MLE results into this "Opt" directory
+   prior to running I-SUGAR-* sub-analyses:
+	cp I/opt.RData Opt/opt.RData
+
+*** MULTI-STAGE RAPID ASSESSMENT ***
+
+For rapid assessments in which the calibration inference
+is intended for use in multiple new event inferences:
+1) Go to the directory containing the baseline case:
+
+% cd I-SUGAR-hob-0
+
+2) Run the runMPEM.r file to calibrate the model parameters
+
+3) Copy the .RData file into the additional case directories
+   upon completion of this run, for example:
+
+% cp .RData ../I-SUGAR-hob-pi-0/.
+
+4) For each case, run the runMPEM_0.r file to characterize the
+   new event parameters
+
+If only one rapid assessment is to be conducted, first run the
+runMPEM.r file and once the job completes, run the runMPEM_0.r
+file.

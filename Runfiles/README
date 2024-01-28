@@ -1,0 +1,34 @@
+This directory will contain subdirectories for each application.
+Each analysis for a given application will be designated by
+individual subdirectories within the associated application
+directory. Each analysis directory will contain a "runMPEM.r"
+file that provides the R code that is to be run for that analysis.
+
+A symbolic link to the application independent code needed for
+each analysis should be placed in this directory as follows:
+
+% ln -s ../Code/ Code
+
+The Code/ directory contains functions utilized across
+applications, such as the log-likelihood, log-prior, and log-
+posterior distributions and their associated gradients.
+
+Analyses can be run by:
+1) cutting and pasting from "runMPEM.r" into an interactive R
+   session
+2) starting an R session and running, e.g.
+
+> source("runMPEM.r")
+
+3) running in batch mode from the command line, e.g.
+
+% R CMD BATCH runMPEM.r runMPEM.out &
+
+or
+
+% nohup R CMD BATCH runMPEM.r runMPEM.out & disown
+
+for longer jobs when the user must log off the machine.
+
+NOTE: #2 and #3 assume Mac/Linux OS; if running in Windows
+one can presumably find instructions online.
