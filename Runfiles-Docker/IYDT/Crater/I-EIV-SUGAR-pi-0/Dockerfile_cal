@@ -1,0 +1,12 @@
+#
+# Run calibration Crater inference
+#
+
+# Use iydt/crater image containing required
+# R packages, global functions, IYDT-specific
+# functions and data, and crater-specific
+# functions
+FROM iydt/crater
+
+## source run file
+CMD Rscript /crater_eiv_cal/runMPEM.r > /I-EIV-SUGAR-pi-0/runMPEM.out
