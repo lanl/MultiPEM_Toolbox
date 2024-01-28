@@ -1,0 +1,12 @@
+A symbolic link to the application independent code needed for
+verification tests should be placed in this directory as follows:
+
+% ln -s ../Code/ Code
+
+The file "tests.r" will generate output from two global
+verifiction tests:
+1) "Covariance": Verify Jacobian of transformation used for
+   general observational error covariance structure
+2) "FME_test": Verify performance of adaptive Markov chain
+   Monte Carlo algorithm in R package FME by comparing
+   posterior samples to analytical solutions

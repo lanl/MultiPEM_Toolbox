@@ -1,0 +1,23 @@
+The file "tests.r" will generate output from two global
+verifiction tests:
+1) "Covariance": Verify Jacobian of transformation used for
+   general observational error covariance structure
+2) "FME_test": Verify performance of adaptive Markov chain
+   Monte Carlo algorithm in R package FME by comparing
+   posterior samples to analytical solutions
+
+The global verification tests can be run by executing the
+following steps, assuming the docker software has been installed
+on the user's machine:
+
+1) Build the mpem/global image (see the README file in the
+   MultiPEM_Toolbox_Package/Runfiles-Docker directory).
+
+2) Build the global/test image in this directory
+
+% docker build -t global/test .
+
+3) Run the global tests.
+
+% docker run -it --rm -v <full path to this directory>:\
+  /Test -d global/test

@@ -1,0 +1,19 @@
+The verification tests for each phenomenology can be run by
+executing the following steps, assuming the docker software
+has been installed on the user's machine:
+
+1) Build the mpem/iydt image (see the README file in the
+   MultiPEM_Toolbox_Package/Runfiles-Docker directory).
+
+2) In the MultiPEM_Toolbox_Package directory, build the
+   iydt/test image using docker:
+
+% docker build -f Test-Docker/IYDT/Dockerfile -t iydt/test .
+
+3) Run the tests for each phenomenology. For example, for
+   <analysis> = seismic, execute the commands:
+
+% cd Seismic
+% docker build -t test/seismic .
+% docker run -it --rm -v <full path to analysis directory>:\
+  /Test/Seismic -d test/seismic

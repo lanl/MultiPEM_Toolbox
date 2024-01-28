@@ -1,0 +1,8 @@
+Symbolic links to IYDT-specific code needed for verification
+testing should be placed in this directory as follows:
+
+% ln -s ../../Applications/Code/IYDT/ Code
+% ln -s ../../Applications/Test/IYDT/ Test
+
+The file "tests.r" in each phenomenology directory will
+generate output from the complete set of verification tests.
