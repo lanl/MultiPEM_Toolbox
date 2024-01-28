@@ -1,0 +1,10 @@
+Directories:
+
+Code/
+	Contains application-specific functions
+
+Data/
+	Contains application-specific data files
+
+Test/
+	Contains application-specific verification tests
