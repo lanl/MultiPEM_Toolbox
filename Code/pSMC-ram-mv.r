@@ -157,7 +157,7 @@ SMC = function(N=1000, M=10, nuseq_T=1, range=NULL, psamp=NULL,
     index = sample(1:N, N, prob = newWt, replace = T)
     newsample = newsample[,index]
     newWt = rep(1/N, N)
-    Lsigma = t(chol(cov(t(newsample[1:D,]))))
+    Lsigma = t(chol(cov(t(newsample[1:D,,drop=FALSE]))))
     vLsigma = as.vector(Lsigma)
     newsample = rbind(newsample, matrix(rep(vLsigma,N),nrow=D*D))
     if (t > 2) a = c(a,0)
@@ -170,13 +170,13 @@ SMC = function(N=1000, M=10, nuseq_T=1, range=NULL, psamp=NULL,
       newsample = mout[1:(D*D+D+2),]
       a[t-1] = a[t-1] + sum(mout[D*D+D+3,])
     }
-    samplet = abind(samplet, newsample[1:D,], along = 2)
+    samplet = abind(samplet, newsample[1:D,,drop=FALSE], along = 2)
     lpdent = abind(lpdent,newsample[(D+1):(D+2),],along = 2)
     Wt = abind(Wt, newWt, along = 2)
     a[t-1] = a[t-1] / (M*N)
     if (nuseq[t] >= nuseq_T) break
   }
   t_final = t
-  sample = samplet[,t_final,]
+  sample = matrix(samplet[,t_final,],nrow=D)
   return(list(sample=t(sample),acr=a))
 }
