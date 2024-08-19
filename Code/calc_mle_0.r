@@ -20,7 +20,7 @@
 #                                                                      #
 ########################################################################
 
-calc_mle_0 = function(p_cal,gdir,adir,f0,nst=10,ncor=1,ci_nev=0.95,
+calc_mle_0 = function(p_cal,gdir,adir,f0,nst=10,ncor=1,ci_lev=0.95,
                       igrad=TRUE,bfgs=TRUE,igrck=TRUE,t_cal=NULL,
                       g0=NULL,fopt_in=NULL,Xst=NULL,tst=NULL,
                       fopt_out=NULL,pl="multicore")
@@ -36,7 +36,8 @@ calc_mle_0 = function(p_cal,gdir,adir,f0,nst=10,ncor=1,ci_nev=0.95,
   # f0: names of forward models for each response by phenomenology
   # nst: number of starting values for MLE optimization
   # ncor: number of cores for MLE optimization
-  # ci_nev: confidence interval levels for new event parameter inference
+  # ci_lev: confidence interval levels for calibration and new event
+  #         parameter inference
   # igrad: forward model gradients provided (TRUE/FALSE)
   # bfgs: MLE optimization uses BFGS methods (TRUE/FALSE)
   # igrck: Likelihood function gradient check (TRUE/FALSE)
@@ -70,11 +71,11 @@ calc_mle_0 = function(p_cal,gdir,adir,f0,nst=10,ncor=1,ci_nev=0.95,
     source(paste(gdir,"/glog_likelihood_0.r",sep=""),local=TRUE)
     # R function to calculate information matrix for new event
     # parameters
-    source(paste(gdir,"/info_likelihood.r",sep=""),local=TRUE)
+    source(paste(gdir,"/info_likelihood_0.r",sep=""),local=TRUE)
   } else {
     # R function to calculate observed information matrix
     # for new event parameters
-    source(paste(gdir,"/observed_information.r",sep=""),local=TRUE)
+    source(paste(gdir,"/observed_information_0.r",sep=""),local=TRUE)
   }
 
   # Application
@@ -135,7 +136,7 @@ calc_mle_0 = function(p_cal,gdir,adir,f0,nst=10,ncor=1,ci_nev=0.95,
   # statistical model functions
   if( !igrad ){ gll_0 = NULL }
   p_cal$ll_0 = ll_0; p_cal$gll_0 = gll_0;
-  if( !igrad ){ p_cal$obs_info = obs_info }
+  if( !igrad ){ p_cal$obs_info_0 = obs_info_0 }
   # support functions
   p_cal$print_ss_0 = print_ss_0
 
@@ -165,7 +166,7 @@ calc_mle_0 = function(p_cal,gdir,adir,f0,nst=10,ncor=1,ci_nev=0.95,
         }
         if( length(itheta0_bounds[[2]]) > 0 ){
           for( jj in itheta0_bounds[[2]] ){
-            xst[jj] = runif(1, min=tub[jj]-4,tub[jj])
+            xst[jj] = runif(1, min=tub[jj]-4,max=tub[jj])
           }
         }
         if( length(itheta0_bounds[[3]]) > 0 ){
@@ -185,10 +186,13 @@ calc_mle_0 = function(p_cal,gdir,adir,f0,nst=10,ncor=1,ci_nev=0.95,
           if( p_cal$itransform ){ xst = p_cal$inv_tau(xst,pc=p_cal) }
         }
       }
-      if( !is.null(fopt_in) && ii == 1 ){ xst = opt[[1]]$theta0 }
+      if( !is.null(fopt_in) && ii == 1 ){
+        if( is.null(tst) ){ xst = opt[[1]]$theta0 }
+      }
       Xst = rbind(Xst, xst)
     }
   } else { Xst = Xst }
+  p_cal$Xst = Xst
 
   #
   # END ADDITIONAL QUANTITIES USED IN CALCULATIONS
@@ -297,16 +301,17 @@ calc_mle_0 = function(p_cal,gdir,adir,f0,nst=10,ncor=1,ci_nev=0.95,
     # for new event inference parameters
     if( igrad ){
       p_cal$rapid = TRUE
-      p_cal$Sigma_mle = info_ll(opt_mle, p_cal)
+      p_cal$Sigma_mle_0 = info_ll_0(opt_mle, p_cal)
     } else {
       if( p_cal$opt_B ){
         if( is.null(t_cal) ){
           stop(paste("List t_cal must be provided for bounded",
                      " optimization.",sep=""))
         }
-        p_cal$Sigma_mle = obs_info(p_cal, mle, imle=TRUE, t_cal=t_cal)
+        p_cal$Sigma_mle_0 = obs_info_0(p_cal, mle, imle=TRUE,
+                                       t_cal=t_cal)
       } else {
-        p_cal$Sigma_mle = obs_info(p_cal, mle, imle=TRUE)
+        p_cal$Sigma_mle_0 = obs_info_0(p_cal, mle, imle=TRUE)
       }
     }
     # Print MLE
@@ -314,7 +319,9 @@ calc_mle_0 = function(p_cal,gdir,adir,f0,nst=10,ncor=1,ci_nev=0.95,
     cat("\n")
     # Indicator of prior distribution parameters
     p_cal$iPrior = FALSE
-    p_cal = print_ss_0(mle$par, p_cal, ci=ci_nev)
+    xmle = mle$par
+    if( p_cal$ncalp > 0 ){ xmle = c(xmle,p_cal$mle_calp) }
+    p_cal = print_ss_0(xmle, p_cal, ci=ci_lev)
   }
 
   #
@@ -402,7 +409,7 @@ calc_xst = function(p_cal,t_cal)
   }
   if( length(itheta0_bounds[[2]]) > 0 ){
     for( jj in itheta0_bounds[[2]] ){
-      xst[jj] = runif(1, min=tub[jj]-4,tub[jj])
+      xst[jj] = runif(1, min=tub[jj]-4,max=tub[jj])
     }             
   }
   if( length(itheta0_bounds[[3]]) > 0 ){

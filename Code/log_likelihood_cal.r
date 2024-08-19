@@ -37,6 +37,11 @@ ll_cal = function(x, pc)
     }
     x = x[-(1:pc$ntheta0)]
   }
+  # extract calibration inference parameters
+  if( pc$ncalp > 0 ){
+    calp = x[1:pc$ncalp]
+    x = x[-(1:pc$ncalp)]
+  }
   # extract errors-in-variables yield parameters
   if( exists("eiv",where=pc,inherits=FALSE) && pc$eiv ){
     w_eiv = x[1:pc$nsource]
@@ -138,6 +143,16 @@ ll_cal = function(x, pc)
     }
     Sigma_h = t(L_h) %*% L_h
 
+    # setup for calibration inference parameters
+    if( "cal_par_names" %in% names(pc$h[[hh]]) ){
+      csub = which(pc$cal_par_names %in% pc$h[[hh]]$cal_par_names)
+      if( length(csub) > 0 ){
+        Cp = calp[csub]
+        pm$cal_par_names = pc$h[[hh]]$cal_par_names
+        pm$ncalp = length(pm$cal_par_names)
+      }
+    } else { pm$cal = FALSE }
+
     # iterate over sources in phenomenology "hh"
     for(ii in 1:pc$h[[hh]]$nsource){
       # number of responses for source "ii"
@@ -145,12 +160,18 @@ ll_cal = function(x, pc)
       n_hi_tot = sum(n_hi)
 
       # setup argument for forward model call
-      Arg = "(beta_t,pm)"
+      Arg = "(c(beta_t"
+      if( exists("cal_par_names",where=pm,inherits=FALSE) ){
+        if( !("nev" %in% pnames) || !pc$h[[hh]]$nev[ii] ){
+          pm$cal = TRUE
+          Arg = paste(Arg,",Cp",sep="")
+        } else { pm$cal = FALSE }
+      }
       if( "eiv" %in% pnames ){
         if( !is.null(pc$h[[hh]]$eiv[[ii]]) ){
           W = w_eiv[pc$h[[hh]]$eiv[[ii]]]
           pm$theta_names = "W"
-          Arg = "(c(beta_t,W),pm)"
+          Arg = paste(Arg,",W",sep="")
         } else {
           if( exists("theta_names",where=pm,inherits=FALSE) ){
             rm(theta_names, envir=pm)
@@ -159,9 +180,10 @@ ll_cal = function(x, pc)
       }
       if( "nev" %in% pnames && pc$h[[hh]]$nev[ii] ){
         if( "itheta0" %in% pnames ){
-          Arg = "(c(beta_t,theta0[pc$h[[hh]]$itheta0]),pm)"
-        } else { Arg = "(c(beta_t,theta0),pm)" }
+          Arg = paste(Arg,",theta0[pc$h[[hh]]$itheta0]",sep="")
+        } else { Arg = paste(Arg,",theta0",sep="") }
       }
+      Arg=paste(Arg,"),pm)",sep="")
 
       # named parameters in forward model call
       if( "theta_names" %in% pnames &&
@@ -234,10 +256,11 @@ ll_cal = function(x, pc)
 
           # calculate forward model
           fcall = paste("pc$ffm$",pc$h[[hh]]$f[rr],Arg,sep="")
+          yhat = eval(parse(text=fcall))
+          if( any(is.nan(yhat)) ){ return(-Inf) }
 
           # calculate residual vector
-          resid = c(resid,pc$h[[hh]]$Y[[ii]][[rr]] -
-                          eval(parse(text=fcall)))
+          resid = c(resid,pc$h[[hh]]$Y[[ii]][[rr]] - yhat)
 
           # calculate components of model covariance matrix
           if( pc$pvc_1 > 0 && any(pc$h[[hh]]$pvc_1 > 0) ){
@@ -268,7 +291,7 @@ ll_cal = function(x, pc)
       }
 
       # calculate model covariance matrix
-      Omega = Matrix(0,n_hi_tot,n_hi_tot)
+      Omega = Matrix(0,n_hi_tot,n_hi_tot,sparse=FALSE,doDiag=FALSE)
       for( r1 in 1:Rh ){
         if( n_hi[r1] > 0 ){
           st_nir1 = 0
@@ -279,7 +302,8 @@ ll_cal = function(x, pc)
               st_nir2 = 0
               if( r2 > 1 ){ st_nir2 = sum(n_hi[1:(r2-1)]) }
               ic = st_nir2+(1:n_hi[r2])
-              Sigma_hi = Matrix(0,n_hi[r1],n_hi[r2])
+              Sigma_hi = Matrix(0,n_hi[r1],n_hi[r2],sparse=FALSE,
+                                doDiag=FALSE)
               Sigma_hi[pc$h[[hh]]$i[[ii]]$cov_pairs[[r1]][[r2]]] =
                 Sigma_h[r1,r2]
               Omega[ir,ic] = Sigma_hi

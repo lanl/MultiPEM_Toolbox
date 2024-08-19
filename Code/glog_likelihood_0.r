@@ -160,9 +160,11 @@ gll_0 = function(x, pc)
 
         # calculate forward model
         fcall = paste("pc$ffm$",pc$h[[hh]]$f0[rr],Arg,sep="")
+        yhat = eval(parse(text=fcall))
+        if( any(is.nan(yhat)) ){ return(NaN) }
 
         # calculate residual vector
-        resid = c(resid,pc$h[[hh]]$Y0[[rr]] - eval(parse(text=fcall)))
+        resid = c(resid,pc$h[[hh]]$Y0[[rr]] - yhat)
 
         # calculate components of Jacobian matrix
         gcall = paste("pc$gfm$",pc$h[[hh]]$g0[rr],Arg,sep="")

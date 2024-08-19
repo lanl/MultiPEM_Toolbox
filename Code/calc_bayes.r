@@ -25,9 +25,9 @@
 calc_bayes = function(p_cal,gdir,adir,nst=10,nburn=10000,nmcmc=20000,
                       nthin=20,ncor_map=1,ncor_mc=1,igrad=TRUE,
                       igrck_pr=TRUE,igrck_po=TRUE,bfgs=TRUE,ibpr=FALSE,
-                      itpr=FALSE,fpr_b=NULL,fgpr_b=NULL,fpr_t=NULL,
-                      fgpr_t=NULL,Xnom=NULL,imcmc="FME",pl="multicore",
-                      t_cal=NULL)
+                      icpr=FALSE,itpr=FALSE,fpr_b=NULL,fgpr_b=NULL,
+                      fpr_c=NULL,fgpr_c=NULL,fpr_t=NULL,fgpr_t=NULL,
+                      Xnom=NULL,imcmc="FME",pl="multicore",t_cal=NULL)
 {
   #
   # FUNCTION INPUTS
@@ -41,7 +41,7 @@ calc_bayes = function(p_cal,gdir,adir,nst=10,nburn=10000,nmcmc=20000,
   # nburn: number of Markov chain Monte Carlo (MCMC) burn-in samples
   # nmcmc: number of MCMC production samples
   # nthin: posterior sample thinning rate
-  # ncor_map: number of cores for MAP optimization (if relevant)
+  # ncor_map: number of cores for MAP optimization
   # ncor_mc: number of cores for generating parallel MCMC chains
   # igrad: forward model gradients provided (TRUE/FALSE)
   # igrck_pr: Prior distribution gradient check (TRUE/FALSE)
@@ -49,12 +49,18 @@ calc_bayes = function(p_cal,gdir,adir,nst=10,nburn=10000,nmcmc=20000,
   # bfgs: MAP optimization uses BFGS methods (TRUE/FALSE)
   # ibpr: prior distributions provided for forward model
   #       coefficients (TRUE/FALSE)
+  # icpr: prior distributions provided for calibration inference
+  #       parameters (TRUE/FALSE)
   # itpr: prior distributions provided for new event
   #       parameters (TRUE/FALSE)
   # fpr_b: location of functions computing log-prior density for
   #        forward model coefficients
   # fgpr_b: location of functions computing gradients of log-prior
   #         density for forward model coefficients
+  # fpr_c: location of functions computing log-prior density for
+  #        calibration inference parameters
+  # fgpr_c: location of functions computing gradients of log-prior
+  #         density for calibration inference parameters
   # fpr_t: location of functions computing log-prior density for
   #        new event parameters
   # fgpr_t: location of functions computing gradients of log-prior
@@ -74,10 +80,10 @@ calc_bayes = function(p_cal,gdir,adir,nst=10,nburn=10000,nmcmc=20000,
   # SOURCE SUPPORTING R FUNCTIONS
   #     
 
-  if( !exists("obs_info",where=p_cal,inherits=FALSE) ){
+  if( !exists("obs_info_0",where=p_cal,inherits=FALSE) ){
     # R function to calculate observed information matrix
-    source(paste(gdir,"/observed_information.r",sep=""),local=TRUE)
-    p_cal$obs_info = obs_info
+    source(paste(gdir,"/observed_information_0.r",sep=""),local=TRUE)
+    p_cal$obs_info_0 = obs_info_0
   }
 
   #   
@@ -171,6 +177,27 @@ calc_bayes = function(p_cal,gdir,adir,nst=10,nburn=10000,nmcmc=20000,
     }
   }
 
+  if( icpr && p_cal$ncalp > 0 ){
+    # prior distributions for calibration inference parameters
+    if( is.null(fpr_c) ){
+      source(paste(adir,"/lp_c.r",sep=""),local=TRUE)
+    } else { source(fpr_c,local=TRUE) }
+    if( "lp_calp" %in% names(p_cal) ){
+      ufn = p_cal$lp_calp$f
+      eval(parse(text=paste("p_cal$flp$",ufn," = ",ufn,sep="")))
+    }
+    # gradients
+    if( igrad ){
+      if( is.null(fgpr_c) ){
+        source(paste(adir,"/glp_c.r",sep=""),local=TRUE)
+      } else { source(fgpr_c,local=TRUE) }
+      if( "lp_calp" %in% names(p_cal) ){
+        ugn = p_cal$lp_calp$g
+        eval(parse(text=paste("p_cal$glp$",ugn," = ",ugn,sep="")))
+      }
+    }
+  }
+
   # FGSN parameters for errors-in-variables yields prior
   # total number of FGSN parameters
   p_cal$p_fgsn = 0
@@ -192,7 +219,15 @@ calc_bayes = function(p_cal,gdir,adir,nst=10,nburn=10000,nmcmc=20000,
   # total number of parameters (model + prior)
   npars = p_cal$nmpars + p_cal$p_fgsn + p_cal$p_A
 
-  # starting values for prior parameters in MAP optimization
+  # starting values for parameters in MAP optimization
+  if( exists("nev",where=p_cal,inherits=FALSE) && p_cal$nev ){
+    tlb = p_cal$theta0_bounds[,1]
+    tub = p_cal$theta0_bounds[,2]
+  } 
+  Xst = matrix(p_cal$mle,nrow=1)
+  p_cal$npars = p_cal$nmpars
+  if( nst != nrow(p_cal$Xst) ){ nst = nrow(p_cal$Xst) }
+  if( nst > 1 ){ Xst = rbind(Xst,p_cal$Xst[2:nst,,drop=FALSE]) }
   if( npars > p_cal$nmpars ){
     p_cal$npars = npars
     if( is.null(Xnom) ){
@@ -203,6 +238,7 @@ calc_bayes = function(p_cal,gdir,adir,nst=10,nburn=10000,nmcmc=20000,
         }
       }
     } else { Xnom = Xnom }
+    Xst = cbind(Xst,Xnom)
   }
 
   # Source log-prior and gradient of the log-prior
@@ -224,16 +260,13 @@ calc_bayes = function(p_cal,gdir,adir,nst=10,nburn=10000,nmcmc=20000,
   source(paste(gdir,"/log_posterior_full.r",sep=""),local=TRUE)
   if( igrad ){
     source(paste(gdir,"/glog_posterior_full.r",sep=""),local=TRUE)
-  } else { glpost_full = NULL }
-  if( npars > p_cal$nmpars ){
-    p_cal$lpost_full = lpost_full; p_cal$glpost_full = glpost_full;
   }
 
+  # Attach posterior functions needed for Bayesian computation
+  if( !igrad ){ glpost_full = NULL }
+  p_cal$lpost_full = lpost_full; p_cal$glpost_full = glpost_full;
+
   # Maximize log posterior to find MAP estimate
-  if( exists("nev",where=p_cal,inherits=FALSE) && p_cal$nev ){
-    tlb = p_cal$theta0_bounds[,1]
-    tub = p_cal$theta0_bounds[,2]
-  }
   if( p_cal$opt_B ){
     lb_optim = rep(-Inf, npars)
     if( exists("nev",where=p_cal,inherits=FALSE) && p_cal$nev ){
@@ -246,58 +279,42 @@ calc_bayes = function(p_cal,gdir,adir,nst=10,nburn=10000,nmcmc=20000,
     }
     p_cal$ub_optim = ub_optim
   }
-  if( npars > p_cal$nmpars ){
-    # parallel optimization using R package "future"
-    require(doFuture)
-    if( ncor_map == 1 ){ pl = "sequential"; plan(pl);
-    } else {
-      if( ncor_map > nst ){ ncor_map = nst }
-      if( pl != "sequential" ){ plan(pl,workers=ncor_map)
-      } else { plan(pl) }
+  for( ii in 1:nst ){
+    xst = Xst[ii,]
+    while( is.infinite(lpost_full(xst, pc=p_cal)) ){
+      xst = calc_xst(p_cal,t_cal)
     }
-    cmax = -Inf
-    ptm = proc.time()
-    fCatch = foreach( qq = 1:nst ) %dofuture% {
-               lpo_opt(Xnom[qq,],bfgs,p_cal)
-             } %seed% TRUE
-    plan(sequential)
-    print("Run time:")
-    print(proc.time() - ptm)
-    cat("\n")
-    Mlp = NULL
-    for( qq in 1:nst ){
-      if( is(fCatch[[qq]]$value,"list") ){
-        Map = fCatch[[qq]]$value
-        Mlp = c(Mlp,Map$value)
-      } else { Mlp = c(Mlp,-Inf) }
-    }
-    imax = which( Mlp == max(Mlp) ); imax = imax[1];
-    if( Mlp[imax] > cmax ){
-      cmax = Mlp[imax]
-      map = fCatch[[imax]]$value
-    }
+    Xst[ii,] = xst
+  }
+  p_cal$calc_xst = calc_xst
+  # parallel optimization using R package "future"
+  require(doFuture)
+  if( ncor_map == 1 ){ pl = "sequential"; plan(pl);
   } else {
-    if( bfgs ){
-      if( p_cal$opt_B ){
-        map = optim(p_cal$mle, fn=lpost_full, gr=glpost_full, pc=p_cal,
-                    method="L-BFGS-B",
-                    lower=lb_optim, upper=ub_optim,
-                    control=list(fnscale = -1,maxit=1000))
-      } else {
-        map = optim(p_cal$mle, fn=lpost_full, gr=glpost_full, pc=p_cal,
-                    method="BFGS",
-                    control=list(fnscale = -1,maxit=1000))
-      }
-    } else {
-      if( p_cal$opt_B ){
-        map = optim(p_cal$mle, fn=lpost_full, pc=p_cal,
-                    lower=lb_optim, upper=ub_optim,
-                    control=list(fnscale = -1,maxit=10000))
-      } else {
-        map = optim(p_cal$mle, fn=lpost_full, pc=p_cal,
-                    control=list(fnscale = -1,maxit=10000))
-      }
-    }
+    if( ncor_map > nst ){ ncor_map = nst }
+    if( pl != "sequential" ){ plan(pl,workers=ncor_map)
+    } else { plan(pl) }
+  }
+  cmax = -Inf
+  ptm = proc.time()
+  fCatch = foreach( qq = 1:nst ) %dofuture% {
+             lpo_opt(Xst[qq,],bfgs,p_cal)
+           } %seed% TRUE
+  plan(sequential)
+  print("Run time:")
+  print(proc.time() - ptm)
+  cat("\n")
+  Mlp = NULL
+  for( qq in 1:nst ){
+    if( is(fCatch[[qq]]$value,"list") ){
+      Map = fCatch[[qq]]$value
+      Mlp = c(Mlp,Map$value)
+    } else { Mlp = c(Mlp,-Inf) }
+  }
+  imax = which( Mlp == max(Mlp) ); imax = imax[1];
+  if( Mlp[imax] > cmax ){
+    cmax = Mlp[imax]
+    map = fCatch[[imax]]$value
   }
   qq = 0; irel_tol = 0;
   while( qq <= 5 ){
@@ -360,8 +377,10 @@ calc_bayes = function(p_cal,gdir,adir,nst=10,nburn=10000,nmcmc=20000,
       if( is.null(t_cal) ){
         stop("List t_cal must be provided for bounded optimization.")
       }
-      p_cal = p_cal$obs_info(p_cal, map, imle=FALSE, t_cal=t_cal)
-    } else { p_cal = p_cal$obs_info(p_cal, map, imle=FALSE) }
+      p_cal = p_cal$obs_info_0(p_cal, map, imle=FALSE, t_cal=t_cal)
+    } else { p_cal = p_cal$obs_info_0(p_cal, map, imle=FALSE) }
+    lambda = (2.38)^2/npars
+    p_cal$IHess = lambda*p_cal$IHess
   }
 
   # Print convergence status of log-posterior optimization
@@ -679,41 +698,90 @@ calc_bayes = function(p_cal,gdir,adir,nst=10,nburn=10000,nmcmc=20000,
   return(p_cal)
 }
 
-lpo_opt = function(xst,bfgs,pc)
+calc_xst = function(p_cal,t_cal)
+{
+  nxst = 0
+  xst = NULL
+  if( exists("nev",where=p_cal,inherits=FALSE) && p_cal$nev ){
+    xst = runif(p_cal$ntheta0, min=-2, max=2)
+    tlb = p_cal$theta0_bounds[,1]
+    tub = p_cal$theta0_bounds[,2]
+    itheta0_bounds = vector("list",3)
+    if( exists("itheta0_bounds",where=p_cal,inherits=FALSE) ){
+      itheta0_bounds=p_cal$itheta0_bounds
+    } else if( !is.null(t_cal) ){
+      itheta0_bounds=t_cal$itheta0_bounds
+    }
+    if( length(itheta0_bounds[[1]]) > 0 ){
+      for( jj in itheta0_bounds[[1]] ){
+        xst[jj] = runif(1, min=tlb[jj],max=tlb[jj]+4)
+      }
+    }
+    if( length(itheta0_bounds[[2]]) > 0 ){
+      for( jj in itheta0_bounds[[2]] ){
+        xst[jj] = runif(1, min=tub[jj]-4,max=tub[jj])
+      }
+    }
+    if( length(itheta0_bounds[[3]]) > 0 ){
+      for( jj in itheta0_bounds[[3]] ){
+        xst[jj] = runif(1, min=tlb[jj],max=tub[jj])
+      }
+    }
+    nxst = nxst + p_cal$ntheta0
+  }
+  xst = c(xst, runif(p_cal$nmpars-p_cal$ntheta0, min=-2, max=2))
+  if( exists("nev",where=p_cal,inherits=FALSE) && p_cal$nev &&
+      !p_cal$opt_B ){
+    if( exists("itheta0_bounds",where=p_cal,inherits=FALSE) ){
+      xst[1:p_cal$ntheta0] =
+        p_cal$inv_transform(xst[1:p_cal$ntheta0],pc=p_cal)
+    }
+    if( exists("itransform",where=p_cal,inherits=FALSE) ){
+      if( p_cal$itransform ){
+        xst[1:p_cal$ntheta0] = p_cal$inv_tau(xst[1:p_cal$ntheta0],
+                                             pc=p_cal)
+      }
+    }
+  }
+  if( p_cal$ncalp > 0 ){ nxst = nxst + p_cal$ncalp }
+  if( exists("eiv",where=p_cal,inherits=FALSE) && p_cal$eiv ){
+    xst[nxst + 1:p_cal$nsource] = p_cal$eiv_w
+  }
+  return(xst)
+}
+
+lpo_opt = function(xst,bfgs,pc,tc)
 {
   maxiter = 5
   ii = 1
-  xnom = c(pc$mle, xst)
   while( ii <= maxiter ){
     if( bfgs ){
       if( pc$opt_B ){
-        Catch = pc$tryCatch.W.E(optim(xnom, fn=pc$lpost_full,
+        Catch = pc$tryCatch.W.E(optim(xst, fn=pc$lpost_full,
                 gr=pc$glpost_full, pc=pc, method="L-BFGS-B",
                 lower=pc$lb_optim, upper=pc$ub_optim,
                 control=list(fnscale = -1,maxit=1000)))
       } else {
-        Catch = pc$tryCatch.W.E(optim(xnom, fn=pc$lpost_full,
+        Catch = pc$tryCatch.W.E(optim(xst, fn=pc$lpost_full,
                 gr=pc$glpost_full, pc=pc, method="BFGS",
                 control=list(fnscale = -1,maxit=1000)))
       }
     } else {
       if( pc$opt_B ){
-        Catch = pc$tryCatch.W.E(optim(xnom, fn=pc$lpost_full,
+        Catch = pc$tryCatch.W.E(optim(xst, fn=pc$lpost_full,
                 pc=pc, lower=pc$lb_optim, upper=pc$ub_optim,
                 control=list(fnscale = -1,maxit=10000)))
       } else {
-        Catch = pc$tryCatch.W.E(optim(xnom, fn=pc$lpost_full,
+        Catch = pc$tryCatch.W.E(optim(xst, fn=pc$lpost_full,
                 pc=pc, control=list(fnscale = -1,maxit=10000)))
       }
     }
     if( is(Catch$value,"list") ){
       return(Catch)
     } else {
-      xst = runif(pc$npars-pc$nmpars,min=-2,max=2)
-      xnom = c(pc$mle, xst)
-      while( is.infinite(pc$lpost_full(xnom, pc=pc)) ){
-        xst = runif(pc$npars-pc$nmpars,min=-2,max=2)
-        xnom = c(pc$mle, xst)
+      xst = pc$calc_xst(pc,tc)
+      while( is.infinite(pc$lpost_full(xst, pc=pc)) ){
+        xst = pc$calc_xst(pc,tc)
       }
       ii = ii+1
       if( ii > maxiter ){ return(Catch) } else { next }
