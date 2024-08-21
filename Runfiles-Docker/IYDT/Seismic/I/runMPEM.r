@@ -276,10 +276,10 @@ if( nev ){
   } else { tst = NULL }
 
   # Confidence interval levels for new event parameter inference
-  ci_nev = 0.95
+  ci_lev = 0.95
 } else {
   tst = NULL
-  ci_nev = NULL
+  ci_lev = NULL
 }
 
 # Indicate phenomenology number and type (if needed
@@ -298,7 +298,7 @@ parallel_plan = "multicore"
 
 # MLE calculations
 p_cal = calc_mle(p_cal,gen_dir,app_dir,fm,nst=nstart,ncor=ncores_mle,
-                 ci_nev=ci_nev,igrad=igrad,bfgs=bfgs,igrck=mle_grad_ck,
+                 ci_lev=ci_lev,igrad=igrad,bfgs=bfgs,igrck=mle_grad_ck,
                  t_cal=t_cal,g=gfm,iresp=iResponse,fp_fm=fPars,
                  fopt_in=opt_files_in,Xst=NULL,tst=tst,
                  fopt_out=opt_files_out,phen=Phen,pl=parallel_plan)
@@ -344,6 +344,31 @@ if( iBayes ){
     gr_prior_files_beta = NULL
   }
 
+  # Indicator of prior distribution for theta0
+  iTheta0Prior = FALSE
+
+  if( nev && iTheta0Prior ){
+    # location of code for computing log-prior densities and gradients
+    prior_files_theta0 = NULL
+    if( igrad ){
+      gr_prior_files_theta0 = NULL
+    } else { gr_prior_files_theta0 = NULL }
+
+    # prior distribution for new event parameters (theta0)
+    p_cal$lp_theta0$f = "lp_0"
+    if( igrad ){ p_cal$lp_theta0$g = "lq_0" }
+
+    # parameters for log yield parameter prior (Gaussian)
+    p_cal$pi_w_mu = (log(10)+log(10000000))/2
+    p_cal$pi_w_sd = (log(10000000)-log(10))/6
+    # parameters for HOB/DOB parameter prior (Gaussian)
+    p_cal$pi_h_mu = 0
+    p_cal$pi_h_sd = 160/3
+  } else {
+    prior_files_theta0 = NULL
+    gr_prior_files_theta0 = NULL
+  }
+
   # fixed scale parameters for variance component prior
   # comment out if these parameters should vary
   p_cal$A = 20
@@ -380,31 +405,6 @@ if( iBayes ){
 
   # number of cores to use for generating parallel MCMC chains
   ncores_mc = 1
-
-  # Indicator of prior distribution for theta0
-  iTheta0Prior = FALSE
-
-  if( nev && iTheta0Prior ){
-    # location of code for computing log-prior densities and gradients
-    prior_files_theta0 = NULL
-    if( igrad ){
-      gr_prior_files_theta0 = NULL
-    } else { gr_prior_files_theta0 = NULL }
-
-    # prior distribution for new event parameters (theta0)
-    p_cal$lp_theta0$f = "lp_0"
-    if( igrad ){ p_cal$lp_theta0$g = "lq_0" }
-
-    # parameters for log yield parameter prior (Gaussian)
-    p_cal$pi_w_mu = (log(10)+log(10000000))/2
-    p_cal$pi_w_sd = (log(10000000)-log(10))/6
-    # parameters for HOB/DOB parameter prior (Gaussian)
-    p_cal$pi_h_mu = 0
-    p_cal$pi_h_sd = 160/3
-  } else {
-    prior_files_theta0 = NULL
-    gr_prior_files_theta0 = NULL
-  }
 
   # Indicator of prior gradient check
   prior_grad_ck = TRUE
