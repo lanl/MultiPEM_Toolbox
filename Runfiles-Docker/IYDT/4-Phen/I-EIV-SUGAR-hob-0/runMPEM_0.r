@@ -191,7 +191,7 @@ if( tst ){
 } else { tst = NULL }
 
 # Confidence interval levels for new event parameter inference
-ci_nev = 0.95
+ci_lev = 0.95
 
 # Indicator of MLE gradient check
 mle_grad_ck = TRUE
@@ -201,7 +201,7 @@ parallel_plan = "multicore"
 
 # MLE calculations
 p_cal = calc_mle_0(p_cal,gen_dir,app_dir,fm0,nst=nstart,ncor=ncores_mle,
-                   ci_nev=ci_nev,igrad=igrad,bfgs=bfgs,
+                   ci_lev=ci_lev,igrad=igrad,bfgs=bfgs,
                    igrck=mle_grad_ck,t_cal=t_cal,g0=gfm0,
                    fopt_in=opt_files_in,Xst=NULL,tst=tst,
                    fopt_out=opt_files_out,pl=parallel_plan)
@@ -221,22 +221,6 @@ iBayes = TRUE
 if( iBayes ){
   # Source supporting R function
   source(paste(gen_dir,"/calc_bayes_0.r",sep=""))
-
-  # specify MCMC algorithm
-  # options: "RAM", "FME", "NUTS", or "SMC"
-  iMCMC = "FME"
-
-  # burn-in
-  nburn = 10000
-
-  # production
-  nmcmc = 20000
-
-  # posterior sample thinning rate (for multiple imputation)
-  nthin = 1
-
-  # number of cores to use for generating parallel MCMC chains
-  ncores_mc = 1
 
   # Indicator of prior distribution for theta0
   iTheta0Prior = FALSE
@@ -263,6 +247,25 @@ if( iBayes ){
     gr_prior_files_theta0 = NULL
   }
 
+  # specify MCMC algorithm
+  # options: "RAM", "FME", "NUTS", or "SMC"
+  iMCMC = "FME"
+
+  # burn-in
+  nburn = 10000
+
+  # production
+  nmcmc = 20000
+
+  # posterior sample thinning rate (for multiple imputation)
+  nthin = 1
+
+  # number of cores to use for optimization
+  ncores_map = 1
+
+  # number of cores to use for generating parallel MCMC chains
+  ncores_mc = 1
+
   # Indicator of prior gradient check
   prior_grad_ck = TRUE
 
@@ -278,8 +281,9 @@ if( iBayes ){
   ub_smc = rep(Inf,length(theta_names))
 
   # Bayesian calculations
-  p_cal = calc_bayes_0(p_cal,gen_dir,app_dir,nburn=nburn,nmcmc=nmcmc,
-                       nthin=nthin,ncor=ncores_mc,igrad=igrad,
+  p_cal = calc_bayes_0(p_cal,gen_dir,app_dir,nst=nstart,nburn=nburn,
+                       nmcmc=nmcmc,nthin=nthin,ncor_map=ncores_map,
+                       ncor_mc=ncores_mc,igrad=igrad,
                        igrck_pr=prior_grad_ck,igrck_po=post_grad_ck,
                        bfgs=bfgs,itpr=iTheta0Prior,
                        fpr_t=prior_files_theta0,
