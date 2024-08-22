@@ -24,6 +24,9 @@
 #  zeta   : vector containing all unknown parameters
 #  params : list containing all auxiliary information
 #           $pbeta : number of empirical parameters
+#           $cal : indicator of calibration inference parameters
+#           $cal_par_names : names of calibration inference parameters
+#           $ncalp : number of calibration inference parameters
 #           $theta_names : names of unknown covariates
 #           $iresp : TRUE for displacement, FALSE for velocity
 #           $yield_scaling : yield scaling factor (nominally 1/3)
@@ -32,24 +35,37 @@
 
 g_s <- function(zeta, params)
 {
-  pzeta <- length(zeta)
   beta <- zeta[1:params$pbeta]
-  if (is.null(params$X)) { nev <- 1
-  } else { nev <- nrow(params$X) }
-  ntheta <- 0
-  if (pzeta > params$pbeta) {
-    ntheta <- pzeta-params$pbeta
-    theta <- matrix(rep(zeta[-(1:params$pbeta)],
-                        each=nev),ncol=ntheta)
-    colnames(theta) <- params$theta_names
-    X <- cbind(theta,params$X)
-  } else {
-    X <- params$X
+  zeta <- zeta[-(1:params$pbeta)]
+  X <- params$X
+  if (is.null(X)) { nev <- 1
+  } else { nev <- nrow(X) }
+  if (params$cal) {
+    calp <- matrix(rep(zeta[1:params$ncalp],each=nev),
+                       ncol=params$ncalp)
+    colnames(calp) <- params$cal_par_names
+    ic2n_cp <- which(colnames(calp) %in% "C2N")
+    if ("C2N" %in% colnames(X) && length(ic2n_cp) > 0){
+      ic2n_x <- which(colnames(X) %in% "C2N")
+      if( ncol(X) > 1 ){ X <- X[,-ic2n_x,drop=FALSE]
+      } else { X <- NULL }
+      if( ncol(calp) > 1 ){
+        X <- cbind(calp[,-ic2n_cp,drop=FALSE], X)
+      }
+    } else { X <- cbind(calp, X) }
+    zeta <- zeta[-(1:params$ncalp)]
   }
-  
+  ntheta = length(zeta)
+  if (ntheta > 0) {
+    theta <- matrix(rep(zeta,each=nev),ncol=ntheta)
+    colnames(theta) <- params$theta_names
+    X <- cbind(theta, X)
+  }
+
   jbeta_s <- matrix(rep(1,nev),ncol=1)
   w_s <- X[,"W"]*params$yield_scaling
-  if ("C2N" %in% colnames(X)){
+  ic2n <- "C2N" %in% colnames(X)
+  if (ic2n){
     c_s <- X[,"C2N"]*params$yield_scaling
   } else {
     c_s <- 0
@@ -66,15 +82,34 @@ g_s <- function(zeta, params)
   jbeta_s <- cbind(jbeta_s,t6,t5)
   rownames(jbeta_s) <- colnames(jbeta_s) <- NULL
 
+  if (params$cal){
+    if (ic2n){
+      jcalp_s <- matrix(-(beta[2]+beta[4]*t6)*params$yield_scaling,
+                        ncol=1)
+      if (params$iresp) { jcalp_s <- jcalp_s+params$yield_scaling }
+    } else {
+      jcalp_s <- matrix(0,nev,1)
+    }
+    rownames(jcalp_s) <- colnames(jcalp_s) <- NULL
+  }
+
   if (ntheta > 0){
     jtheta_s <- matrix(-(beta[2]+beta[4]*t6)*params$yield_scaling,ncol=1)
     if (params$iresp) { jtheta_s <- jtheta_s+params$yield_scaling }
     if (ntheta > 1){ jtheta_s <- cbind(jtheta_s,beta[4]*t5*t2) }
-    if (ntheta > 2){ jtheta_s <- cbind(jtheta_s,jtheta_s[,1]) }
     rownames(jtheta_s) <- colnames(jtheta_s) <- NULL
-    return(list(jbeta=jbeta_s,jtheta=jtheta_s))
+  }
+
+  if (params$cal){
+    if (ntheta > 0){
+      return(list(jbeta=jbeta_s,jcalp=jcalp_s,jtheta=jtheta_s))
+    } else {
+      return(list(jbeta=jbeta_s,jcalp=jcalp_s))
+    }
   } else {
-    return(jbeta_s)
+    if (ntheta > 0){
+      return(list(jbeta=jbeta_s,jtheta=jtheta_s))
+    } else { return(jbeta_s) }
   }
 }
 
@@ -83,6 +118,9 @@ g_s <- function(zeta, params)
 #  zeta   : vector containing all unknown parameters
 #  params : list containing all auxiliary information 
 #           $pbeta : number of empirical parameters
+#           $cal : indicator of calibration inference parameters
+#           $cal_par_names : names of calibration inference parameters
+#           $ncalp : number of calibration inference parameters
 #           $theta_names : names of unknown covariates
 #           $yield_scaling : yield scaling factor (nominally 1/3)
 #           $pressure_scaling : pressure scaling factor (nominally 1/3)
@@ -91,24 +129,37 @@ g_s <- function(zeta, params)
 
 g_a <- function(zeta, params)
 {
-  pzeta <- length(zeta)
   beta <- zeta[1:params$pbeta]
-  if (is.null(params$X)) { nev <- 1
-  } else { nev <- nrow(params$X) }
-  ntheta <- 0
-  if (pzeta > params$pbeta) {
-    ntheta <- pzeta-params$pbeta
-    theta <- matrix(rep(zeta[-(1:params$pbeta)],
-                        each=nev),ncol=ntheta)
+  zeta <- zeta[-(1:params$pbeta)]
+  X <- params$X
+  if (is.null(X)) { nev <- 1
+  } else { nev <- nrow(X) }
+  if (params$cal) {
+    calp <- matrix(rep(zeta[1:params$ncalp],each=nev),
+                       ncol=params$ncalp)
+    colnames(calp) <- params$cal_par_names
+    ic2n_cp <- which(colnames(calp) %in% "C2N")
+    if ("C2N" %in% colnames(X) && length(ic2n_cp) > 0){
+      ic2n_x <- which(colnames(X) %in% "C2N")
+      if( ncol(X) > 1 ){ X <- X[,-ic2n_x,drop=FALSE]
+      } else { X <- NULL }
+      if( ncol(calp) > 1 ){
+        X <- cbind(calp[,-ic2n_cp,drop=FALSE], X)
+      }
+    } else { X <- cbind(calp, X) }
+    zeta <- zeta[-(1:params$ncalp)]
+  }
+  ntheta = length(zeta)
+  if (ntheta > 0) {
+    theta <- matrix(rep(zeta,each=nev),ncol=ntheta)
     colnames(theta) <- params$theta_names
-    X <- cbind(theta,params$X)
-  } else {
-    X <- params$X
+    X <- cbind(theta, X)
   }
 
   jbeta_s <- matrix(rep(1,nev),ncol=1)
   w_s <- X[,"W"]*params$yield_scaling
-  if ("C2N" %in% colnames(X)){
+  ic2n <- "C2N" %in% colnames(X)
+  if (ic2n){
     c_s <- X[,"C2N"]*params$yield_scaling
   } else {
     c_s <- 0
@@ -123,14 +174,32 @@ g_a <- function(zeta, params)
   jbeta_s <- cbind(jbeta_s,t4)
   rownames(jbeta_s) <- colnames(jbeta_s) <- NULL
 
+  if (params$cal){
+    if (ic2n){
+      jcalp_s <- matrix((1-beta[2]-beta[3]*t4)*params$yield_scaling,
+                        ncol=1)
+    } else { 
+      jcalp_s <- matrix(0,nev,1)
+    }
+    rownames(jcalp_s) <- colnames(jcalp_s) <- NULL
+  }
+
   if (ntheta > 0){
     jtheta_s <- matrix((1-beta[2]-beta[3]*t4)*params$yield_scaling,ncol=1)
     if (ntheta > 1){ jtheta_s <- cbind(jtheta_s,beta[3]*t3*t2) }
-    if (ntheta > 2){ jtheta_s <- cbind(jtheta_s,jtheta_s[,1]) }
     rownames(jtheta_s) <- colnames(jtheta_s) <- NULL
-    return(list(jbeta=jbeta_s,jtheta=jtheta_s))
+  }
+
+  if (params$cal){
+    if (ntheta > 0){
+      return(list(jbeta=jbeta_s,jcalp=jcalp_s,jtheta=jtheta_s))
+    } else {
+      return(list(jbeta=jbeta_s,jcalp=jcalp_s))
+    }
   } else {
-    return(jbeta_s)
+    if (ntheta > 0){
+      return(list(jbeta=jbeta_s,jtheta=jtheta_s))
+    } else { return(jbeta_s) }
   }
 }
 
@@ -139,6 +208,9 @@ g_a <- function(zeta, params)
 #  zeta   : vector containing all unknown parameters
 #  params : list containing all auxiliary information
 #           $pbeta : number of empirical parameters
+#           $cal : indicator of calibration inference parameters
+#           $cal_par_names : names of calibration inference parameters
+#           $ncalp : number of calibration inference parameters
 #           $theta_names : names of unknown covariates
 #           $yield_scaling : yield scaling factor (nominally 1/3)
 #           $pressure_scaling : pressure scaling factor (nominally 1/3)
@@ -147,19 +219,23 @@ g_a <- function(zeta, params)
 
 g_o <- function(zeta, params)
 {
-  pzeta <- length(zeta)
   beta <- zeta[1:params$pbeta]
-  if (is.null(params$X)) { nev <- 1
-  } else { nev <- nrow(params$X) }
-  ntheta <- 0
-  if (pzeta > params$pbeta) {
-    ntheta <- pzeta-params$pbeta
-    theta <- matrix(rep(zeta[-(1:params$pbeta)],
-                        each=nev),ncol=ntheta)
+  zeta <- zeta[-(1:params$pbeta)]
+  X <- params$X
+  if (is.null(X)) { nev <- 1
+  } else { nev <- nrow(X) }
+  if (params$cal) {
+    calp <- matrix(rep(zeta[1:params$ncalp],each=nev),
+                       ncol=params$ncalp)
+    colnames(calp) <- params$cal_par_names
+    X <- cbind(calp, X)
+    zeta <- zeta[-(1:params$ncalp)]
+  }
+  ntheta = length(zeta)
+  if (ntheta > 0) {
+    theta <- matrix(rep(zeta,each=nev),ncol=ntheta)
     colnames(theta) <- params$theta_names
-    X <- cbind(theta,params$X)
-  } else {
-    X <- params$X
+    X <- cbind(theta, X)
   }
 
   jbeta_s <- matrix(rep(1,nev),ncol=1)
@@ -181,7 +257,6 @@ g_o <- function(zeta, params)
       t6[t6==0] <- NaN
       jtheta_s <- cbind(jtheta_s,(beta[2]*t6*t3+100*t5)*t1)
     }
-    if (ntheta > 2){ jtheta_s <- cbind(jtheta_s,jtheta_s[,1]) }
     rownames(jtheta_s) <- colnames(jtheta_s) <- NULL
     return(list(jbeta=jbeta_s,jtheta=jtheta_s))
   } else {
@@ -194,6 +269,9 @@ g_o <- function(zeta, params)
 #  zeta   : vector containing all unknown parameters
 #  params : list containing all auxiliary information
 #           $pbeta : number of empirical parameters
+#           $cal : indicator of calibration inference parameters
+#           $cal_par_names : names of calibration inference parameters
+#           $ncalp : number of calibration inference parameters
 #           $theta_names : names of unknown covariates
 #           $yield_scaling : yield scaling factor (nominally 1/3)
 #           $X : matrix of known covariates
@@ -201,19 +279,23 @@ g_o <- function(zeta, params)
 
 g_c <- function(zeta, params)
 {
-  pzeta <- length(zeta)
   beta <- zeta[1:params$pbeta]
-  if (is.null(params$X)) { nev <- 1
-  } else { nev <- nrow(params$X) }
-  ntheta <- 0
-  if (pzeta > params$pbeta) {
-    ntheta <- pzeta - params$pbeta
-    theta <- matrix(rep(zeta[-(1:params$pbeta)],
-                        each=nev),ncol=ntheta)
+  zeta <- zeta[-(1:params$pbeta)]
+  X <- params$X
+  if (is.null(X)) { nev <- 1
+  } else { nev <- nrow(X) }
+  if (params$cal) {
+    calp <- matrix(rep(zeta[1:params$ncalp],each=nev),
+                       ncol=params$ncalp)
+    colnames(calp) <- params$cal_par_names
+    X <- cbind(calp, X)
+    zeta <- zeta[-(1:params$ncalp)]
+  }
+  ntheta = length(zeta)
+  if (ntheta > 0) {
+    theta <- matrix(rep(zeta,each=nev),ncol=ntheta)
     colnames(theta) <- params$theta_names
-    X <- cbind(theta, params$X)
-  } else {
-    X <- params$X
+    X <- cbind(theta, X)
   }
 
   jbeta_s <- matrix(rep(1,nev),ncol=1)

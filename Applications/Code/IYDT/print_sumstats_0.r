@@ -1,9 +1,10 @@
 ########################################################################
 #                                                                      #
 # This file contains code for organizing and printing the new event    #
-# parameter estimates provided to the function. If a parameter matrix  #
-# is provided along with quantile levels, the parameter quantiles are  #
-# computed in addition to the parameter mean. All results are printed. #
+# (and, if relevant, the calibration) parameter estimates provided to  #
+# the function. If a parameter matrix is provided along with quantile  #
+# levels, the parameter quantiles are computed in addition to the      #
+# parameter mean. All results are printed.                             #
 #                                                                      #
 # © 2023. Triad National Security, LLC. All rights reserved.           #
 # This program was produced under U.S. Government contract             #
@@ -37,7 +38,7 @@ print_ss_0 = function(xfin, pc, ci=NULL, levels=NULL)
   print("NEW EVENT INFERENCE PARAMETERS")
   cat("\n")
   if( !is.vector(xfin) ){
-    stheta0 = as.matrix(sfin)
+    stheta0 = as.matrix(sfin[,1:pc$ntheta0])
     colnames(stheta0) = pc$theta_names
     if( exists("itransform",where=pc,inherits=FALSE) ){
       if( pc$itransform ){
@@ -70,7 +71,7 @@ print_ss_0 = function(xfin, pc, ci=NULL, levels=NULL)
         }
       }
     }
-    pc$tmpi = stheta0
+    pc$tmpi_0 = stheta0
     print(paste("POSTERIOR MEAN: ",round(apply(stheta0,2,mean),2),
           sep=""))
     cat("\n")
@@ -89,8 +90,9 @@ print_ss_0 = function(xfin, pc, ci=NULL, levels=NULL)
     cat("\n")
     print(round(cor(stheta0),2))
     cat("\n")
+    sfin = as.matrix(sfin[,-(1:pc$ntheta0)])
   } else {
-    theta0_it = xfin
+    theta0_it = xfin[1:pc$ntheta0]
     names(theta0_it) = pc$theta_names
     theta0 = theta0_it
     iit = FALSE
@@ -104,23 +106,23 @@ print_ss_0 = function(xfin, pc, ci=NULL, levels=NULL)
       iit = TRUE
       theta0 = pc$transform(theta0, pc=pc)
     }
-    if( !pc$iPrior ){ pc$tmle = theta0
-    } else { pc$tmap = theta0 }
+    if( !pc$iPrior ){ pc$tmle_0 = theta0
+    } else { pc$tmap_0 = theta0 }
     print("ESTIMATE: ")
     cat("\n")
     print(round(theta0,2))
     cat("\n")
-    if( pc$Sigma_mle$acov && !pc$iPrior ){
+    if( pc$Sigma_mle_0$acov_0 && !pc$iPrior ){
       print("STANDARD DEVIATION: ")
       cat("\n")
-      theta0_sd = sqrt(diag(pc$Sigma_mle$II_nev))
+      theta0_sd = sqrt(diag(pc$Sigma_mle_0$II_nev))
       names(theta0_sd) = pc$theta_names
       print(round(theta0_sd,2))
       cat("\n")
       if( exists("rapid",where=pc,inherits=FALSE) && pc$rapid ){
         print("STANDARD DEVIATION FIXED MODEL PARAMETERS: ")
         cat("\n")
-        theta0_sd_0 = sqrt(diag(pc$Sigma_mle$II_nev_0))
+        theta0_sd_0 = sqrt(diag(pc$Sigma_mle_0$II_nev_0))
         names(theta0_sd_0) = pc$theta_names
         print(round(theta0_sd_0,2))
         cat("\n")
@@ -129,7 +131,7 @@ print_ss_0 = function(xfin, pc, ci=NULL, levels=NULL)
       cat("\n")
       if( pc$ntheta0 > 1 ){ ISD_nev = diag(1/theta0_sd)
       } else { ISD_nev = 1/theta0_sd }
-      C_nev = ISD_nev %*% pc$Sigma_mle$II_nev %*% ISD_nev
+      C_nev = ISD_nev %*% pc$Sigma_mle_0$II_nev %*% ISD_nev
       rownames(C_nev) = pc$theta_names
       colnames(C_nev) = pc$theta_names
       print(round(as.matrix(C_nev),2))
@@ -139,7 +141,7 @@ print_ss_0 = function(xfin, pc, ci=NULL, levels=NULL)
         cat("\n")
         if( pc$ntheta0 > 1 ){ ISD_nev_0 = diag(1/theta0_sd_0)
         } else { ISD_nev_0 = 1/theta0_sd_0 }
-        C_nev_0 = ISD_nev_0 %*% pc$Sigma_mle$II_nev_0 %*% ISD_nev_0
+        C_nev_0 = ISD_nev_0 %*% pc$Sigma_mle_0$II_nev_0 %*% ISD_nev_0
         rownames(C_nev_0) = pc$theta_names
         colnames(C_nev_0) = pc$theta_names
         print(round(as.matrix(C_nev_0),2))
@@ -149,8 +151,8 @@ print_ss_0 = function(xfin, pc, ci=NULL, levels=NULL)
         for( qq in 1:length(ci) ){
           z_alpha = qnorm((1-ci[qq])/2,lower.tail=FALSE)
           if( iit ){
-            lb = theta0_it - z_alpha*sqrt(diag(pc$Sigma_mle$II_nev_it))
-            ub = theta0_it + z_alpha*sqrt(diag(pc$Sigma_mle$II_nev_it))
+            lb = theta0_it - z_alpha*sqrt(diag(pc$Sigma_mle_0$II_nev_it))
+            ub = theta0_it + z_alpha*sqrt(diag(pc$Sigma_mle_0$II_nev_it))
             if( exists("itransform",where=pc,inherits=FALSE) ){
               if( pc$itransform ){
                 bmat = rbind(lb,ub)         
@@ -175,8 +177,8 @@ print_ss_0 = function(xfin, pc, ci=NULL, levels=NULL)
               ub = pc$transform(ub, pc=pc)
             }
           } else {
-            lb = theta0 - z_alpha*sqrt(diag(pc$Sigma_mle$II_nev))
-            ub = theta0 + z_alpha*sqrt(diag(pc$Sigma_mle$II_nev))
+            lb = theta0 - z_alpha*sqrt(diag(pc$Sigma_mle_0$II_nev))
+            ub = theta0 + z_alpha*sqrt(diag(pc$Sigma_mle_0$II_nev))
           }
           print(paste(100*ci[qq],"%: ","CONFIDENCE INTERVAL:",sep=""))
           cat("\n")
@@ -187,9 +189,9 @@ print_ss_0 = function(xfin, pc, ci=NULL, levels=NULL)
           if( exists("rapid",where=pc,inherits=FALSE) && pc$rapid ){
             if( iit ){
               lb_0 = theta0_it -
-                     z_alpha*sqrt(diag(pc$Sigma_mle$II_nev_0_it))
+                     z_alpha*sqrt(diag(pc$Sigma_mle_0$II_nev_0_it))
               ub_0 = theta0_it +
-                     z_alpha*sqrt(diag(pc$Sigma_mle$II_nev_0_it))
+                     z_alpha*sqrt(diag(pc$Sigma_mle_0$II_nev_0_it))
               if( exists("itransform",where=pc,inherits=FALSE) ){
                 if( pc$itransform ){
                   bmat = rbind(lb_0,ub_0)
@@ -214,8 +216,8 @@ print_ss_0 = function(xfin, pc, ci=NULL, levels=NULL)
                 ub_0 = pc$transform(ub_0, pc=pc)
               }
             } else {
-              lb_0 = theta0 - z_alpha*sqrt(diag(pc$Sigma_mle$II_nev_0))
-              ub_0 = theta0 + z_alpha*sqrt(diag(pc$Sigma_mle$II_nev_0))
+              lb_0 = theta0 - z_alpha*sqrt(diag(pc$Sigma_mle_0$II_nev_0))
+              ub_0 = theta0 + z_alpha*sqrt(diag(pc$Sigma_mle_0$II_nev_0))
             }
             print(paste(100*ci[qq],"%: ",
                         "CONFIDENCE INTERVAL FIXED MODEL PARAMETERS:",
@@ -228,6 +230,54 @@ print_ss_0 = function(xfin, pc, ci=NULL, levels=NULL)
           }
         }
       }
+    }
+    xfin = xfin[-(1:pc$ntheta0)]
+    cat("\n")
+  }
+
+  # print calibration inference parameters
+  if( !pc$iPrior && pc$ncalp > 0 ){
+    print("CALIBRATION INFERENCE PARAMETERS")
+    cat("\n")
+    if( is.vector(xfin) ){
+      calp = xfin[1:pc$ncalp]
+      names(calp) = pc$cal_par_names
+      print("ESTIMATE: ")
+      cat("\n")
+      print(round(calp,2))
+      cat("\n")
+      if( pc$Sigma_mle_0$acov_cal && !pc$iPrior ){
+        print("STANDARD DEVIATION: ")
+        cat("\n")
+        calp_sd = sqrt(diag(pc$Sigma_mle_0$II_calp))
+        names(calp_sd) = pc$cal_par_names
+        print(round(calp_sd,2))
+        cat("\n")
+        print("CORRELATION MATRIX: ")
+        cat("\n")
+        if( pc$ncalp > 1 ){ ISD_calp = diag(1/calp_sd)
+        } else { ISD_calp = 1/calp_sd }
+        C_calp = ISD_calp %*% pc$Sigma_mle_0$II_calp %*% ISD_calp
+        rownames(C_calp) = pc$cal_par_names
+        colnames(C_calp) = pc$cal_par_names
+        print(round(as.matrix(C_calp),2))
+        cat("\n")
+        if( !is.null(ci) ){
+          for( qq in 1:length(ci) ){
+            z_alpha = qnorm((1-ci[qq])/2,lower.tail=FALSE)
+            lb = calp - z_alpha*sqrt(diag(pc$Sigma_mle_0$II_calp))
+            ub = calp + z_alpha*sqrt(diag(pc$Sigma_mle_0$II_calp))
+            print(paste(100*ci[qq],"%: ","CONFIDENCE INTERVAL:",sep=""))
+            cat("\n")
+            ci_mat = rbind(lb,ub)
+            colnames(ci_mat) = pc$cal_par_names
+            print(round(ci_mat,2))
+            cat("\n")
+          }
+        }
+      }
+      xfin = xfin[-(1:pc$ncalp)]
+      cat("\n")
     }
   }
   return(pc)

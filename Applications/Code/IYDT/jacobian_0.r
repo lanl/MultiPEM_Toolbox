@@ -57,7 +57,6 @@ g0_s <- function(zeta, params)
                      ncol=1)
   if (params$iresp) { jtheta_s <- jtheta_s+params$yield_scaling }
   if (ntheta > 1){ jtheta_s <- cbind(jtheta_s,beta[4]*t3*t1) }
-  if (ntheta > 2){ jtheta_s <- cbind(jtheta_s,jtheta_s[,1]) }
   rownames(jtheta_s) <- colnames(jtheta_s) <- NULL
   return(jtheta_s)
 }
@@ -96,7 +95,6 @@ g0_a <- function(zeta, params)
   jtheta_s <- matrix((1-beta[2]-beta[3]*h_s*t2)*params$yield_scaling,
                      ncol=1)
   if (ntheta > 1){ jtheta_s <- cbind(jtheta_s,beta[3]*t2*t1) }
-  if (ntheta > 2){ jtheta_s <- cbind(jtheta_s,jtheta_s[,1]) }
   rownames(jtheta_s) <- colnames(jtheta_s) <- NULL
   return(jtheta_s)
 }
@@ -136,7 +134,6 @@ g0_o <- function(zeta, params)
     t5[t5==0] <- NaN
     jtheta_s <- cbind(jtheta_s,(beta[2]*t5*t2+100*t4)*t1)
   }
-  if (ntheta > 2){ jtheta_s <- cbind(jtheta_s,jtheta_s[,1]) }
   rownames(jtheta_s) <- colnames(jtheta_s) <- NULL
   return(jtheta_s)
 }

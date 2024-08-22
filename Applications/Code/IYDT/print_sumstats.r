@@ -59,8 +59,7 @@ print_ss = function(xfin, pc, ci=NULL, levels=NULL)
       if( exists("itransform",where=pc,inherits=FALSE) ){
         if( pc$itransform ){
           for( ii in 1:nrow(stheta0) ){
-            stheta0[ii,1:pc$ntheta0] = pc$tau(stheta0[ii,1:pc$ntheta0],
-                                              pc=pc)
+            stheta0[ii,] = pc$tau(stheta0[ii,],pc=pc)
           }
         }
       }
@@ -123,16 +122,16 @@ print_ss = function(xfin, pc, ci=NULL, levels=NULL)
         iit = TRUE
         theta0 = pc$transform(theta0, pc=pc)
       }
-      if( !pc$iPrior ){ pc$tmle = theta0
-      } else { pc$tmap = theta0 }
+      if( !pc$iPrior ){ pc$tmle_0 = theta0
+      } else { pc$tmap_0 = theta0 }
       print("ESTIMATE: ")
       cat("\n")
       print(round(theta0,2))
       cat("\n")
-      if( pc$Sigma_mle$acov && !pc$iPrior ){
+      if( pc$Sigma_mle_0$acov_0 && !pc$iPrior ){
         print("STANDARD DEVIATION: ")
         cat("\n")
-        theta0_sd = sqrt(diag(pc$Sigma_mle$II_nev))
+        theta0_sd = sqrt(diag(pc$Sigma_mle_0$II_nev))
         names(theta0_sd) = pc$theta_names
         print(round(theta0_sd,2))
         cat("\n")
@@ -140,7 +139,7 @@ print_ss = function(xfin, pc, ci=NULL, levels=NULL)
         cat("\n")
         if( pc$ntheta0 > 1 ){ ISD_nev = diag(1/theta0_sd)
         } else { ISD_nev = 1/theta0_sd }
-        C_nev = ISD_nev %*% pc$Sigma_mle$II_nev %*% ISD_nev
+        C_nev = ISD_nev %*% pc$Sigma_mle_0$II_nev %*% ISD_nev
         rownames(C_nev) = pc$theta_names
         colnames(C_nev) = pc$theta_names
         print(round(as.matrix(C_nev),2))
@@ -149,8 +148,10 @@ print_ss = function(xfin, pc, ci=NULL, levels=NULL)
           for( qq in 1:length(ci) ){
             z_alpha = qnorm((1-ci[qq])/2,lower.tail=FALSE)
             if( iit ){
-              lb = theta0_it - z_alpha*sqrt(diag(pc$Sigma_mle$II_nev_it))
-              ub = theta0_it + z_alpha*sqrt(diag(pc$Sigma_mle$II_nev_it))
+              lb = theta0_it -
+                   z_alpha*sqrt(diag(pc$Sigma_mle_0$II_nev_it))
+              ub = theta0_it +
+                   z_alpha*sqrt(diag(pc$Sigma_mle_0$II_nev_it))
               if( exists("itransform",where=pc,inherits=FALSE) ){
                 if( pc$itransform ){
                   bmat = rbind(lb,ub)
@@ -175,8 +176,8 @@ print_ss = function(xfin, pc, ci=NULL, levels=NULL)
                 ub = pc$transform(ub, pc=pc)
               }
             } else {
-              lb = theta0 - z_alpha*sqrt(diag(pc$Sigma_mle$II_nev))
-              ub = theta0 + z_alpha*sqrt(diag(pc$Sigma_mle$II_nev))
+              lb = theta0 - z_alpha*sqrt(diag(pc$Sigma_mle_0$II_nev))
+              ub = theta0 + z_alpha*sqrt(diag(pc$Sigma_mle_0$II_nev))
             }
             print(paste(100*ci[qq],"%: ","CONFIDENCE INTERVAL:",sep=""))
             cat("\n")
@@ -188,6 +189,82 @@ print_ss = function(xfin, pc, ci=NULL, levels=NULL)
         }
       }
       xfin = xfin[-(1:pc$ntheta0)]
+      cat("\n")
+    }
+  }
+
+  # print calibration inference parameters
+  if( pc$ncalp > 0 ){
+    if( exists("nev",where=pc,inherits=FALSE) && pc$nev ){
+      Sigma_mle = pc$Sigma_mle_0
+    } else {
+      Sigma_mle = pc$Sigma_mle_cal
+    }
+    print("CALIBRATION INFERENCE PARAMETERS")
+    cat("\n")
+    if( !is.vector(xfin) ){
+      scalp = as.matrix(sfin[,1:pc$ncalp])
+      colnames(scalp) = pc$cal_par_names
+      pc$mpi_calp = scalp
+      print(paste("POSTERIOR MEAN: ",round(apply(scalp,2,mean),2),
+            sep=""))
+      cat("\n")
+      print(paste("POSTERIOR SD: ",round(apply(scalp,2,sd),2),
+            sep=""))
+      cat("\n")
+      if( !is.null(levels) ){
+        qfin = apply(scalp,2,quantile,probs=levels)
+        for( qq in 1:nlevels ){
+          print(paste("LEVEL ",100*levels[qq],"%: ",
+                      round(qfin[qq,],2),sep=""))
+          cat("\n")
+        }
+      }
+      print("CORRELATION MATRIX:")
+      cat("\n")
+      print(round(cor(scalp),2))
+      cat("\n")
+      sfin = as.matrix(sfin[,-(1:pc$ncalp)])
+    } else {
+      calp = xfin[1:pc$ncalp]
+      names(calp) = pc$cal_par_names
+      if( !pc$iPrior ){ pc$mle_calp = calp
+      } else { pc$map_calp = calp }
+      print("ESTIMATE: ")
+      cat("\n")
+      print(round(calp,2))
+      cat("\n")
+      if( Sigma_mle$acov_cal && !pc$iPrior ){
+        print("STANDARD DEVIATION: ")
+        cat("\n")
+        calp_sd = sqrt(diag(Sigma_mle$II_calp))
+        names(calp_sd) = pc$cal_par_names
+        print(round(calp_sd,2))
+        cat("\n")
+        print("CORRELATION MATRIX: ")
+        cat("\n")
+        if( pc$ncalp > 1 ){ ISD_calp = diag(1/calp_sd)
+        } else { ISD_calp = 1/calp_sd }
+        C_calp = ISD_calp %*% Sigma_mle$II_calp %*% ISD_calp
+        rownames(C_calp) = pc$cal_par_names
+        colnames(C_calp) = pc$cal_par_names
+        print(round(as.matrix(C_calp),2))
+        cat("\n")
+        if( !is.null(ci) ){
+          for( qq in 1:length(ci) ){
+            z_alpha = qnorm((1-ci[qq])/2,lower.tail=FALSE)
+            lb = calp - z_alpha*sqrt(diag(Sigma_mle$II_calp))
+            ub = calp + z_alpha*sqrt(diag(Sigma_mle$II_calp))
+            print(paste(100*ci[qq],"%: ","CONFIDENCE INTERVAL:",sep=""))
+            cat("\n")
+            ci_mat = rbind(lb,ub)
+            colnames(ci_mat) = pc$cal_par_names
+            print(round(ci_mat,2))
+            cat("\n")
+          }
+        }
+      }
+      xfin = xfin[-(1:pc$ncalp)]
       cat("\n")
     }
   }
