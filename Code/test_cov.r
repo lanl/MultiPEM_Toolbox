@@ -71,7 +71,7 @@ for( R in vR ){
     i+choose(j,2)
   }
 
-  Jac_c = Matrix(0,npar,npar)
+  Jac_c = Matrix(0,npar,npar,sparse=FALSE,doDiag=FALSE)
 
   qq = 0
   for( r2 in 1:R ){

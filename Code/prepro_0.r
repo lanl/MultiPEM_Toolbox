@@ -339,30 +339,30 @@ prepro_0 = function(p_cal,gdir,adir,rdir,ndir,tnames,nimp=1,bopt=FALSE,
   source(paste(gdir,"/make_par_0.r",sep=""),local=TRUE)
   p_cal$pc_0 = pc_0
   p_cal = pc_0(p_cal$mle_cal, p_cal)
-  if( nimp > 1 ){
-    mpi = p_cal$mpi
-    nmpi = nrow(mpi)
-    p_cal$mpi = NULL
-    if( nmpi < nimp ){
-      print(paste("The amount of posterior samples available is ",
-                  "insufficient for the requested number of ",
-                  "imputation samples.",sep=""))
-      cat("\n")
-      print(paste("Reducing number of imputation samples to match ",
-                  "number of available posterior samples.",sep=""))
-      cat("\n")
-      nimp = nmpi
-    }
-    if( nmpi > 1 ){
-      imp_samp = round(seq(1,nmpi,length=nimp))
-      p_cal$mpi = mpi[imp_samp,]
-    } else {
-      print(paste("Insufficient posterior samples for multiple ",
-                  "imputation.",sep=""))
-      cat("\n")
-    }
-  } else {
-    if( exists("mpi",where=p_cal,inherits=FALSE) ){ p_cal$mpi = NULL }
+  if( exists("mpi",where=p_cal,inherits=FALSE) ){
+    if( nimp > 1 ){
+      mpi = p_cal$mpi
+      nmpi = nrow(mpi)
+      p_cal$mpi = NULL
+      if( nmpi < nimp ){
+        print(paste("The amount of posterior samples available is ",
+                    "insufficient for the requested number of ",
+                    "imputation samples.",sep=""))
+        cat("\n")
+        print(paste("Reducing number of imputation samples to match ",
+                    "number of available posterior samples.",sep=""))
+        cat("\n")
+        nimp = nmpi
+      }
+      if( nmpi > 1 ){
+        imp_samp = round(seq(1,nmpi,length=nimp))
+        p_cal$mpi = mpi[imp_samp,]
+      } else {
+        print(paste("Insufficient posterior samples for multiple ",
+                    "imputation.",sep=""))
+        cat("\n")
+      }
+    } else { p_cal$mpi = NULL }
   }
   p_cal$nimp = nimp
 

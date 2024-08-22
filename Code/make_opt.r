@@ -29,6 +29,14 @@ make_opt = function(xfin, pc)
     xfin = xfin[-(1:pc$ntheta0)]
   }
 
+  # collect calibration inference parameters
+  if( pc$ncalp > 0 ){
+    xfin_calp = xfin[1:pc$ncalp]
+    names(xfin_calp) = pc$cal_par_names
+    opt$calp = xfin_calp
+    xfin = xfin[-(1:pc$ncalp)]
+  }
+
   # collect errors-in-variables inference parameters
   if( pc$nsource > 0 ){
     xfin_eiv = xfin[1:pc$nsource]

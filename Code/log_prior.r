@@ -87,6 +87,16 @@ lprior = function(x, pc)
     }
     x = x[-(1:pc$ntheta0)]
   }
+  if( pc$ncalp > 0 ){
+    calp = x[1:pc$ncalp]
+    if( "lp_calp" %in% names(pc) ){
+      Arg = "(calp,pc)"
+      lp_calp_call = paste("pc$flp$",pc$lp_calp$f,Arg,sep="")
+      # evaluate log-prior for calibration inference parameters
+      lp = lp + eval(parse(text=lp_calp_call))
+    }
+    x = x[-(1:pc$ncalp)]
+  }
   # extract errors-in-variables yield parameters
   if( exists("eiv",where=pc,inherits=FALSE) && pc$eiv ){
     w_eiv = x[1:pc$nsource]
@@ -283,7 +293,7 @@ lprior = function(x, pc)
              eta+(Rh-1:(Rh-1)-1)/2))
     # jacobian
     ncpar = Rh*(Rh+1)/2
-    Jac_c = Matrix(0,ncpar,ncpar)
+    Jac_c = Matrix(0,ncpar,ncpar,sparse=FALSE,doDiag=FALSE)
     qq = 0
     k_ij = pc$k_ij
     for( r2 in 1:Rh ){

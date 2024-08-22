@@ -126,7 +126,7 @@ ess_cov = function(opt, pc)
       }
 
       # calculate model covariance matrix
-      Omega = Matrix(0,n_hi_tot,n_hi_tot)
+      Omega = Matrix(0,n_hi_tot,n_hi_tot,sparse=FALSE,doDiag=FALSE)
       for( r1 in 1:Rh ){
         if( n_hi[r1] > 0 ){
           st_nir1 = 0
@@ -137,7 +137,8 @@ ess_cov = function(opt, pc)
               st_nir2 = 0
               if( r2 > 1 ){ st_nir2 = sum(n_hi[1:(r2-1)]) }
               ic = st_nir2+(1:n_hi[r2])
-              Sigma_hi = Matrix(0,n_hi[r1],n_hi[r2])
+              Sigma_hi = Matrix(0,n_hi[r1],n_hi[r2],sparse=FALSE,
+                                doDiag=FALSE)
               Sigma_hi[pc$h[[hh]]$i[[ii]]$cov_pairs[[r1]][[r2]]] =
                 Sigma_h[r1,r2]
               Omega[ir,ic] = Sigma_hi

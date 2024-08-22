@@ -27,10 +27,15 @@ gll_full = function(x, pc=p_cal)
   gll = pc$gll_cal(x, pc)
 
   if( exists("eiv",where=pc,inherits=FALSE) && pc$eiv ){
+    st_geiv = 0
     if( exists("nev",where=pc,inherits=FALSE) && pc$nev ){
       x = x[-(1:pc$ntheta0)]
-      st_geiv = pc$ntheta0
-    } else { st_geiv = 0 }
+      st_geiv = st_geiv + pc$ntheta0
+    }
+    if( pc$ncalp > 0 ){
+      st_geiv = st_geiv + pc$ncalp
+      x = x[-(1:pc$ncalp)]
+    }
     x = x[1:pc$nsource]
     igeiv = st_geiv+(1:pc$nsource)
     gll[igeiv] = gll[igeiv] + pc$gll_eiv(x, pc)

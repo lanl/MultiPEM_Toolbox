@@ -47,7 +47,7 @@ calc_zmat_0 = function(pc=p_cal)
                   pc$h[[hh]]$n[[nsource]][rr] > 0 ){
                 pc$h[[hh]]$Z2[[nsource]][[rr]] =
                 Matrix(0,pc$h[[hh]]$n[[nsource]][rr],
-                         pc$h[[hh]]$nplev[nsource,rr])
+                         pc$h[[hh]]$nplev[nsource,rr],doDiag=FALSE)
                 for( ss in 1:pc$h[[hh]]$nplev[nsource,rr] ){
                   st_nhijr = 0
                   if( ss > 1 ){

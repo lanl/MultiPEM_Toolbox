@@ -25,6 +25,9 @@ pc_0 = function(xfin, pc)
   # use R Matrix package
   require(Matrix)
 
+  # remove calibration inference parameters
+  if( pc$ncalp > 0 ){ xfin = xfin[-(1:pc$ncalp)] }
+
   # remove errors-in-variables inference parameters
   if( pc$nsource > 0 ){ xfin = xfin[-(1:pc$nsource)] }
 
@@ -141,7 +144,7 @@ pc_0 = function(xfin, pc)
     }
     Sigma_h = t(L_h) %*% L_h
     # calculate model covariance matrix
-    Omega = Matrix(0,n_h0_tot,n_h0_tot)
+    Omega = Matrix(0,n_h0_tot,n_h0_tot,sparse=FALSE,doDiag=FALSE)
     for( r1 in 1:Rh ){
       if( n_h0[r1] > 0 ){
         st_n0r1 = 0
@@ -152,7 +155,8 @@ pc_0 = function(xfin, pc)
             st_n0r2 = 0
             if( r2 > 1 ){ st_n0r2 = sum(n_h0[1:(r2-1)]) }
             ic = st_n0r2+(1:n_h0[r2])
-            Sigma_h0 = Matrix(0,n_h0[r1],n_h0[r2])
+            Sigma_h0 = Matrix(0,n_h0[r1],n_h0[r2],sparse=FALSE,
+                              doDiag=FALSE)
             Sigma_h0[pc$h[[hh]]$i[[nsource]]$cov_pairs[[r1]][[r2]]] =
               Sigma_h[r1,r2]
             Omega[ir,ic] = Sigma_h0

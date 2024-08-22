@@ -114,6 +114,17 @@ glprior = function(x, pc)
     }
     x = x[-(1:pc$ntheta0)]
   } else { gr_th0 = NULL }
+  if( pc$ncalp > 0 ){
+    calp = x[1:pc$ncalp]
+    gr_cp = numeric(pc$ncalp)
+    if( "lp_calp" %in% names(pc) ){
+      Arg = "(calp,pc)"
+      glp_calp_call = paste("pc$glp$",pc$lp_calp$g,Arg,sep="")
+      # evaluate gradient for calibration inference parameters
+      gr_cp = eval(parse(text=glp_calp_call))
+    }
+    x = x[-(1:pc$ncalp)]
+  } else { gr_cp = NULL }
   # extract errors-in-variables yield parameters
   if( exists("eiv",where=pc,inherits=FALSE) && pc$eiv ){
     w_eiv = x[1:pc$nsource]
@@ -324,7 +335,7 @@ glprior = function(x, pc)
     # evaluate gradient for observational error parameters
     # jacobian
     ncpar = Rh*(Rh+1)/2
-    Jac_c = Matrix(0,ncpar,ncpar)
+    Jac_c = Matrix(0,ncpar,ncpar,sparse=FALSE,doDiag=FALSE)
     qq = 0
     k_ij = pc$k_ij
     for( r2 in 1:Rh ){
@@ -350,7 +361,7 @@ glprior = function(x, pc)
     gr_eps_mat = matrix(0,Rh,Rh)
     for( q in 1:Rh ){
       for( p in 1:q ){
-        dJac_c = Matrix(0,ncpar,ncpar)
+        dJac_c = Matrix(0,ncpar,ncpar,sparse=FALSE,doDiag=FALSE)
         if( q > 1 ){
           for( r1 in 1:(q-1) ){
             if( r1 >= p ){
@@ -460,8 +471,8 @@ glprior = function(x, pc)
       }
     }
   }
-  return(c(gr_th0,gr_eiv,gr_beta0,gr_betat,gr_vc1,gr_vc2,gr_eps,gr_fgsn,
-           gr_A))
+  return(c(gr_th0,gr_cp,gr_eiv,gr_beta0,gr_betat,gr_vc1,gr_vc2,gr_eps,
+           gr_fgsn,gr_A))
 }
 
 gdfgsn = function(w,alpha,lambda,omega)

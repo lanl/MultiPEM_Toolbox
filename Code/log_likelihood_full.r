@@ -29,6 +29,9 @@ ll_full = function(x, pc=p_cal)
     if( exists("nev",where=pc,inherits=FALSE) && pc$nev ){
       x = x[-(1:pc$ntheta0)]
     }
+    if( pc$ncalp > 0 ){
+      x = x[-(1:pc$ncalp)]
+    }
     x = x[1:pc$nsource]
     ll = ll + pc$ll_eiv(x, pc)
   }

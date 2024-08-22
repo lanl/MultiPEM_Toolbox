@@ -22,8 +22,8 @@
 prepro = function(gdir,adir,rdir,cdir,Rh,pbeta,bopt=FALSE,nev=FALSE,
                   itr=FALSE,izmat=FALSE,ieiv=NULL,seiv=NULL,ewsd=NULL,
                   Th=NULL,pbetat=NULL,ibetar=NULL,pvc_1=NULL,pvc_2=NULL,
-                  tnames=NULL,fp_tr=NULL,tlb=NULL,tub=NULL,ndir=NULL,
-                  tsub=NULL)
+                  tnames=NULL,cnames=NULL,fp_tr=NULL,tlb=NULL,tub=NULL,
+                  ndir=NULL,tsub=NULL)
 {
   #
   # FUNCTION INPUTS
@@ -57,6 +57,7 @@ prepro = function(gdir,adir,rdir,cdir,Rh,pbeta,bopt=FALSE,nev=FALSE,
   # pvc_2: list containing level 2 variance component parameter
   #        counts by phenomenology
   # tnames: names of new event inference parameters
+  # cnames: names of calibration inference parameters
   # fp_tr: fixed parameters for new event parameter transform
   # tlb: lower bounds for new event parameters
   # tub: upper bounds for new event parameters
@@ -88,6 +89,11 @@ prepro = function(gdir,adir,rdir,cdir,Rh,pbeta,bopt=FALSE,nev=FALSE,
 
   # Indicator of boundary optimization
   p_cal$opt_B = bopt
+
+  # names of calibration inference parameters
+  p_cal$cal_par_names = cnames
+  # number of calibration inference parameters
+  p_cal$ncalp = length(cnames)
 
   # Collect unique source levels by phenomenology
   source_levels = vector("list",0)
@@ -545,6 +551,17 @@ prepro = function(gdir,adir,rdir,cdir,Rh,pbeta,bopt=FALSE,nev=FALSE,
     p_cal = calc_zmat(p_cal)
   }
 
+  # subset calibration inference parameters if necessary
+  if( !is.null(cnames) ){
+    for( hh in 1:p_cal$H ){
+      csub = which(p_cal$cal_par_names %in% colnames(cal_data[[hh]]))
+      if( length(csub) > 0 ){
+        # Specification of calibration parameters by phenomenology
+        p_cal$h[[hh]]$cal_par_names = p_cal$cal_par_names[csub]
+      }
+    }
+  }
+
   #
   # END USER SPECIFIED FIELDS
   #
@@ -694,9 +711,40 @@ prepro = function(gdir,adir,rdir,cdir,Rh,pbeta,bopt=FALSE,nev=FALSE,
     }
   }
 
+  # Remove known calibration inference parameter values from covariate
+  # matrix if present
+  for( hh in 1:p_cal$H ){
+    if( "cal_par_names" %in% names(p_cal$h[[hh]]) ){
+      ltn = length(p_cal$h[[hh]]$cal_par_names)
+      for( ii in 1:ncsource[hh] ){
+        for( qq in 1:ltn ){
+          for( rr in 1:p_cal$h[[hh]]$Rh ){
+            if( p_cal$h[[hh]]$n[[ii]][rr] > 0 ){
+              if( !is.null(p_cal$h[[hh]]$X[[ii]][[rr]]) ){
+                icol =
+                  which(colnames(p_cal$h[[hh]]$X[[ii]][[rr]])
+                    %in% p_cal$h[[hh]]$cal_par_names[qq])
+                if( length(icol) > 0 ){
+                  if( !is.na(p_cal$h[[hh]]$X[[ii]][[rr]][1,icol]) ){
+                    if( ncol(p_cal$h[[hh]]$X[[ii]][[rr]]) > 1 ){
+                      p_cal$h[[hh]]$X[[ii]][[rr]] =
+                        p_cal$h[[hh]]$X[[ii]][[rr]][,-icol,drop=FALSE]
+                    } else {
+                      p_cal$h[[hh]]$X[[ii]][[rr]] = NULL
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+
   # Total number of model parameters
-  p_cal$nmpars = p_cal$ntheta0+p_cal$nsource+p_cal$pbeta+p_cal$ptbeta+
-                 p_cal$pvc_1+p_cal$pvc_2+sum(Rh*(Rh+1))/2
+  p_cal$nmpars = p_cal$ntheta0+p_cal$ncalp+p_cal$nsource+p_cal$pbeta+
+                 p_cal$ptbeta+p_cal$pvc_1+p_cal$pvc_2+sum(Rh*(Rh+1))/2
 
   #
   # END ADDITIONAL QUANTITIES USED IN CALCULATIONS
