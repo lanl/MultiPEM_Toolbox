@@ -81,14 +81,14 @@ make_opt = function(xfin, pc)
         xfin = xfin[-(1:pvc_1)]
       }
     }
-    if( pc$pvc_2 > 0 ){
-      opt$vc_2 = NULL
-      for( hh in 1:pc$H ){
-        pvc_2 = sum(pc$h[[hh]]$pvc_2)
-        if( pvc_2 > 0 ){
-          opt$vc_2 = c(opt$vc_2, xfin[1:pvc_2])
-          xfin = xfin[-(1:pvc_2)]
-        }
+  }
+  if( pc$pvc_2 > 0 ){
+    opt$vc_2 = NULL
+    for( hh in 1:pc$H ){
+      pvc_2 = sum(pc$h[[hh]]$pvc_2)
+      if( pvc_2 > 0 ){
+        opt$vc_2 = c(opt$vc_2, xfin[1:pvc_2])
+        xfin = xfin[-(1:pvc_2)]
       }
     }
   }

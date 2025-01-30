@@ -22,7 +22,8 @@
 
 prepro_cal = function(gdir,adir,rdir,cdir,Rh,pbeta,izmat=FALSE,
                       ieiv=NULL,seiv=NULL,ewsd=NULL,Th=NULL,pbetat=NULL,
-                      ibetar=NULL,pvc_1=NULL,pvc_2=NULL,cnames=NULL)
+                      ibetar=NULL,pvc_1=NULL,pvc_2=NULL,ptype=NULL,
+                      cnames=NULL)
 {
   #
   # FUNCTION INPUTS
@@ -52,6 +53,9 @@ prepro_cal = function(gdir,adir,rdir,cdir,Rh,pbeta,izmat=FALSE,
   #        counts by phenomenology
   # pvc_2: list containing level 2 variance component parameter
   #        counts by phenomenology
+  # ptype: list indicating treatment of level 2 variance component
+  #        parameter by phenomenology ("Crossed" - common paths exist
+  #        across sources; "Nested" - paths nested within source
   # cnames: names of calibration inference parameters
 
   #
@@ -64,6 +68,12 @@ prepro_cal = function(gdir,adir,rdir,cdir,Rh,pbeta,izmat=FALSE,
 
   # Determine number of phenomenologies
   H = length(cdir)
+
+  # Check path type input
+  if( is.list(ptype) && length(ptype) != H ){
+    stop(paste("Length of ptype list must be equal to the ",
+               "number of phenomenologies.",sep=""))
+  }
 
   # Set up calibration data list
   cal_data = vector("list",H)
@@ -109,6 +119,7 @@ prepro_cal = function(gdir,adir,rdir,cdir,Rh,pbeta,izmat=FALSE,
   # Fill response and covariate matrices
   # count number of sources by phenomenology
   ncsource = numeric(H)
+  nsource_groups = numeric(H)
   for( hh in 1:H ){
     # source levels
     if( "Source" %in% names(cal_data[[hh]]) ){
@@ -117,14 +128,67 @@ prepro_cal = function(gdir,adir,rdir,cdir,Rh,pbeta,izmat=FALSE,
       source_levels$h[[hh]] = 1:nrow(cal_data[[hh]])
     }
     ncsource[hh] = length(source_levels$h[[hh]])
+    nsource_groups[hh] = ncsource[hh]
+    p_cal$h[[hh]]$Source_Groups = vector("list",nsource_groups[hh])
+    for( qq in 1:nsource_groups[hh] ){
+      p_cal$h[[hh]]$Source_Groups[[qq]] = qq
+    }
+    if( is.list(ptype) ){ p_cal$h[[hh]]$Path_Type = ptype[[hh]]
+    } else { p_cal$h[[hh]]$Path_Type = ptype }
+    if( "Path" %in% names(cal_data[[hh]]) ){
+      if( !is.null(p_cal$h[[hh]]$Path_Type) &&
+          "Crossed" %in% p_cal$h[[hh]]$Path_Type ){
+        # if common paths across sources, determine source groups
+        # of independent observations
+        path_levels = levels(cal_data[[hh]]$Path)
+        ps_mat = NULL
+        for( qq in path_levels ){
+          is = unique(cal_data[[hh]]$Source[cal_data[[hh]]$Path == qq])
+          ps_mat = rbind(ps_mat,
+                         as.numeric(source_levels$h[[hh]] %in% is))
+        }
+        rownames(ps_mat) = path_levels
+        colnames(ps_mat) = source_levels$h[[hh]]
+        if( max(apply(ps_mat,1,sum)) == 1 ){
+          print(paste("Warning: No Replicated Paths for any Source ",
+                      "for Phenomenology ",hh,
+                      ": Crossed Path Model cannot be fit.",sep=""))
+          p_cal$h[[hh]]$Path_Type = NULL
+          next
+        }
+        S_dep = dep_s(ps_mat,source_levels$h[[hh]])
+        rownames(S_dep) = source_levels$h[[hh]]
+        colnames(S_dep) = source_levels$h[[hh]]
+        s_gp = source_levels$h[[hh]]
+        p_cal$h[[hh]]$Source_Groups = vector("list",1)
+        qq = 1
+        while( length(s_gp) > 0 ){
+          S_dep_1 = dep_s(S_dep,s_gp[1])
+          is1 = rownames(S_dep_1)
+          sg1 = NULL
+          for( jj in is1 ){
+            sg1 = c(sg1,source_levels$h[[hh]][which(S_dep_1[jj,] == 1)])
+          }
+          sg1 = sort(unique(sg1))
+          p_cal$h[[hh]]$Source_Groups[[qq]] =
+            which(source_levels$h[[hh]] %in% sg1)
+          s_gp = s_gp[!(s_gp %in% sg1)]
+          qq = qq + 1
+        }
+        nsource_groups[hh] = length(p_cal$h[[hh]]$Source_Groups)
+      }
+    }
   }
   p_cal$source_levels = source_levels
   p_cal$ncsource = ncsource
+  p_cal$nsource_groups = nsource_groups
   # count outputs by phenomenology, source, path, response
   p_cal$nh = vector("list",H)
   for( hh in 1:H ){
     # total number of sources
     p_cal$h[[hh]]$nsource = ncsource[hh]
+    # total number of source groups
+    p_cal$h[[hh]]$nsource_groups = nsource_groups[hh]
     # response matrix
     p_cal$h[[hh]]$Y = vector("list",ncsource[hh])
     # covariate matrix
@@ -135,10 +199,16 @@ prepro_cal = function(gdir,adir,rdir,cdir,Rh,pbeta,izmat=FALSE,
     p_cal$h[[hh]]$i = vector("list",ncsource[hh])
     # response count
     p_cal$h[[hh]]$Rh = Rh[hh]
-    # path count
-    p_cal$h[[hh]]$nplev = matrix(0,ncsource[hh],Rh[hh])
-    # sample size (hijr)
-    p_cal$nh[[hh]]$i = vector("list",ncsource[hh])
+    # source group membership
+    p_cal$h[[hh]]$Source = vector("list",nsource_groups[hh])
+    # source group path membership
+    p_cal$h[[hh]]$Path = vector("list",nsource_groups[hh])
+    # source group sample size
+    p_cal$h[[hh]]$ng = vector("list",nsource_groups[hh])
+    # source group path count
+    p_cal$h[[hh]]$nplev = matrix(0,nsource_groups[hh],Rh[hh])
+    # source group path positions (hijr)
+    p_cal$nh[[hh]]$i = vector("list",nsource_groups[hh])
     for( qq in 1:ncsource[hh] ){
       if( "Source" %in% names(cal_data[[hh]]) ){
         isource = (cal_data[[hh]]$Source == source_levels$h[[hh]][qq])
@@ -185,20 +255,40 @@ prepro_cal = function(gdir,adir,rdir,cdir,Rh,pbeta,izmat=FALSE,
           }
         }
       }
-      # number of paths per source
+    }
+    for( qq in 1:nsource_groups[hh] ){
+      p_cal$h[[hh]]$ng[[qq]] = numeric(Rh[hh])
+      p_cal$h[[hh]]$Source[[qq]] = vector("list",Rh[hh])
+      p_cal$h[[hh]]$Path[[qq]] = vector("list",Rh[hh])
+      # number of paths per source group
       p_cal$nh[[hh]]$i[[qq]]$r = vector("list",Rh[hh])
       for( rr in 1:Rh[hh] ){
-        if( p_cal$h[[hh]]$n[[qq]][rr] > 0 ){
-          if( !is.null(p_cal$h[[hh]]$X[[qq]][[rr]]) &&
-              "Path" %in% names(p_cal$h[[hh]]$X[[qq]][[rr]]) ){
-            lpath = levels(factor(p_cal$h[[hh]]$X[[qq]][[rr]]$Path))
-            npath = length(lpath)
-            p_cal$h[[hh]]$nplev[qq,rr] = npath
-            p_cal$nh[[hh]]$i[[qq]]$r[[rr]] = numeric(npath)
-            for( ss in 1:npath ){
-              ipath = (p_cal$h[[hh]]$X[[qq]][[rr]]$Path == lpath[ss])
-              p_cal$nh[[hh]]$i[[qq]]$r[[rr]][ss] = sum(ipath)
+        X = NULL
+        for( ii in p_cal$h[[hh]]$Source_Groups[[qq]] ){
+          if( p_cal$h[[hh]]$n[[ii]][rr] > 0 ){
+            p_cal$h[[hh]]$Source[[qq]][[rr]] =
+              c(p_cal$h[[hh]]$Source[[qq]][[rr]],
+                source_levels$h[[hh]][ii])
+            if( !is.null(p_cal$h[[hh]]$X[[ii]][[rr]]) &&
+                "Path" %in% names(p_cal$h[[hh]]$X[[ii]][[rr]]) ){
+              X = rbind(X,p_cal$h[[hh]]$X[[ii]][[rr]])
             }
+          }
+        }
+        if( !is.null(X) ){
+          if( ("Type" %in% colnames(X)) &&
+              (length(unique(X$Type)) > 1) ){
+            stop("Source groups must have a common Type variable.")
+          }
+          lpath = levels(factor(X$Path))
+          p_cal$h[[hh]]$Path[[qq]][[rr]] = lpath
+          npath = length(lpath)
+          p_cal$h[[hh]]$ng[[qq]][rr] = nrow(X)
+          p_cal$h[[hh]]$nplev[qq,rr] = npath
+          p_cal$nh[[hh]]$i[[qq]]$r[[rr]]$p = vector("list",npath)
+          for( ss in 1:npath ){
+            ipath = which(X$Path == lpath[ss])
+            p_cal$nh[[hh]]$i[[qq]]$r[[rr]]$p[[ss]] = ipath
           }
         }
       }
@@ -221,6 +311,23 @@ prepro_cal = function(gdir,adir,rdir,cdir,Rh,pbeta,izmat=FALSE,
                       "per Source for Variance Component models with ",
                       "Phenomenology ",hh," and Response ",rr,".",
                       sep=""))
+        }
+      }
+      if( "Path" %in% names(cal_data[[hh]]) ){
+        lpath = length(unique(cal_data[[hh]]$Path[iresp_rr]))
+        if( lpath == 1 ){
+          print(paste("Warning: Insufficient Paths ",
+                      "for Variance Component models with ",
+                      "Phenomenology ",hh," and Response ",rr,".",
+                      sep=""))
+        } else {
+          tpath = table(cal_data[[hh]]$Path[iresp_rr])
+          if( all(tpath <= 1) ){
+            print(paste("Warning: Insufficient number of observations ",
+                        "per Path for Variance Component models with ",
+                        "Phenomenology ",hh," and Response ",rr,".",
+                        sep=""))
+          }
         }
       }
       if( !vcFlag ){
@@ -340,7 +447,7 @@ prepro_cal = function(gdir,adir,rdir,cdir,Rh,pbeta,izmat=FALSE,
   }
 
   # Variance component coefficient matrices
-  if( p_cal$pvc_1 > 0 ){
+  if( p_cal$pvc_1 > 0 || p_cal$pvc_2 > 0 ){
     if( izmat ){
       # place code calc_zmat.r in application directory
       source(paste(adir,"/calc_zmat.r",sep=""),local=TRUE)
@@ -351,9 +458,31 @@ prepro_cal = function(gdir,adir,rdir,cdir,Rh,pbeta,izmat=FALSE,
   } else { izmat = FALSE }
   p_cal$izmat = izmat
 
+  # Index covariance matrix by response within source group
+  for( hh in 1:H ){
+    if( p_cal$pvc_2 > 0 && any(p_cal$h[[hh]]$pvc_2 > 0) ){
+      Omega_ic = vector("list",p_cal$h[[hh]]$nsource_groups)
+      for( qq in 1:p_cal$h[[hh]]$nsource_groups ){
+        Omega_ic[[qq]] = vector("list",Rh[hh])
+        ntot = 0
+        for( ii in p_cal$h[[hh]]$Source_Groups[[qq]] ){
+          for( rr in 1:Rh[hh] ){
+            if( pvc_2[[hh]][rr] > 0 &&
+              p_cal$h[[hh]]$n[[ii]][rr] > 0 ){
+              Omega_ic[[qq]][[rr]] = c(Omega_ic[[qq]][[rr]],
+                                       ntot + 1:p_cal$h[[hh]]$n[[ii]][rr])
+            }
+            ntot = ntot + p_cal$h[[hh]]$n[[ii]][rr]
+          }
+        }
+      }
+      p_cal$h[[hh]]$Omega_ic = Omega_ic
+    }
+  }
+
   # subset calibration inference parameters if necessary
   if( !is.null(cnames) ){
-    for( hh in 1:p_cal$H ){
+    for( hh in 1:H ){
       csub = which(p_cal$cal_par_names %in% colnames(cal_data[[hh]]))
       if( length(csub) > 0 ){
         # Specification of calibration parameters by phenomenology
@@ -483,7 +612,7 @@ prepro_cal = function(gdir,adir,rdir,cdir,Rh,pbeta,izmat=FALSE,
 
   # Remove known calibration inference parameter values from covariate
   # matrix if present
-  for( hh in 1:p_cal$H ){
+  for( hh in 1:H ){
     if( "cal_par_names" %in% names(p_cal$h[[hh]]) ){
       ltn = length(p_cal$h[[hh]]$cal_par_names)
       for( ii in 1:ncsource[hh] ){
@@ -521,4 +650,18 @@ prepro_cal = function(gdir,adir,rdir,cdir,Rh,pbeta,izmat=FALSE,
   #
 
   return(p_cal)
+}
+
+dep_s = function(X,cc)
+{
+  S = NULL
+  for( ii in cc ){
+    ip = rownames(X)[which(X[,ii] == 1)]
+    sg = NULL
+    for( jj in ip ){ sg = c(sg,colnames(X)[which(X[jj,] == 1)]) }
+    sg = sort(unique(sg))
+    S = rbind(S,as.numeric(colnames(X) %in% sg))
+  }
+  rownames(S) = cc; colnames(S) = colnames(X);
+  return(S)
 }

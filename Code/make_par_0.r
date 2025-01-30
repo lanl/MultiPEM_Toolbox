@@ -57,14 +57,14 @@ pc_0 = function(xfin, pc)
     }
   }
 
-  # extract level 1 variance components
+  # extract source variance components
   if( pc$pvc_1 > 0 ){
     vc1_all = xfin[1:pc$pvc_1]    
     xfin = xfin[-(1:pc$pvc_1)]
   }
 
-  # extract level 2 variance components
-  if( pc$pvc_1 > 0 && pc$pvc_2 > 0 ){
+  # extract path variance components
+  if( pc$pvc_2 > 0 ){
     vc2_all = xfin[1:pc$pvc_2]
     xfin = xfin[-(1:pc$pvc_2)]
   }
@@ -96,42 +96,43 @@ pc_0 = function(xfin, pc)
     # variance component covariance matrices
     if( pc$pvc_1 > 0 && any(pc$h[[hh]]$pvc_1 > 0) ){
       Xi_h01 = vector("list",Rh)
-      if( pc$pvc_2 > 0 && any(pc$h[[hh]]$pvc_1 > 0 &
-                              pc$h[[hh]]$pvc_2 > 0) ){
-        Xi_h02 = vector("list",Rh)
-      }
-    }
-    for( rr in 1:Rh ){
-      if( pc$pvc_1 > 0 && any(pc$h[[hh]]$pvc_1 > 0) ){
+      for( rr in 1:Rh ){
         pvc_1 = pc$h[[hh]]$pvc_1[rr]
-        if( pvc_1 > 0 ){
-          # initialize level 1 covariate matrices
+        if( pvc_1 > 0 &&
+            !is.null(pc$h[[hh]]$Z1[[nsource]][[rr]]) ){
+          # initialize source covariate matrices
           Z1_0 = pc$h[[hh]]$Z1[[nsource]][[rr]]
-          # initialize level 1 bias term covariance matrices
+          # initialize source bias term covariance matrices
           Sigma_hr1 = Diagonal(pvc_1,exp(vc1_all[1:pvc_1]))
           vc1_all = vc1_all[-(1:pvc_1)]
-          # construct level 1 variance component covariance matrices
+          # construct source variance component covariance matrices
           Xi_h01[[rr]] = Z1_0 %*% Sigma_hr1 %*% t(Z1_0)
-        } else { Xi_h01[[rr]] = Diagonal(n_h0[rr],0) }
-        if( pc$pvc_2 > 0 && any(pc$h[[hh]]$pvc_1 > 0 &
-                                pc$h[[hh]]$pvc_2 > 0) ){
-          if( pvc_1 > 0 ){
-            pvc_2 = pc$h[[hh]]$pvc_2[rr]
-            if( pvc_2 > 0 ){
-              # initialize level 2 covariate matrices
-              Z2_0 = pc$h[[hh]]$Z2[[nsource]][[rr]]
-              # initialize level 2 path levels
-              nplev_0 = pc$h[[hh]]$nplev[nsource,rr]
-              # initialize level 2 bias term covariance matrices
-              Sigma_hr2 = Diagonal(pvc_2,exp(vc2_all[1:pvc_2]))
-              vc2_all = vc2_all[-(1:pvc_2)]
-              # construct level 2 variance component covariance
-              # matrices
-              Xi_h02[[rr]] = Z2_0 %*%
-                             kronecker(Diagonal(nplev_0),Sigma_hr2) %*%
-                             t(Z2_0)
-            } else { Xi_h02[[rr]] = Diagonal(n_h0[rr],0) }
-          } else { Xi_h02[[rr]] = Diagonal(n_h0[rr],0) }
+        } else {
+          if( n_h0[rr] > 0 ){ Xi_h01[[rr]] = Diagonal(n_h0[rr],0) }
+        }
+      }
+    }
+    if( pc$pvc_2 > 0 && any(pc$h[[hh]]$pvc_2 > 0) ){
+      nsource_gp = pc$h[[hh]]$nsource_groups
+      Xi_h02 = vector("list",Rh)
+      for( rr in 1:Rh ){
+        pvc_2 = pc$h[[hh]]$pvc_2[rr]
+        if( pvc_2 > 0 &&
+            !is.null(pc$h[[hh]]$Z2[[nsource_gp]][[rr]]) ){
+          # initialize path covariate matrices
+          Z2_0 = pc$h[[hh]]$Z2[[nsource_gp]][[rr]]
+          # initialize path levels
+          nplev_0 = pc$h[[hh]]$nplev[nsource_gp,rr]
+          # initialize path bias term covariance matrices
+          Sigma_hr2 = Diagonal(pvc_2,exp(vc2_all[1:pvc_2]))
+          vc2_all = vc2_all[-(1:pvc_2)]
+          # construct path variance component covariance
+          # matrices
+          Xi_h02[[rr]] = Z2_0 %*%
+                         kronecker(Diagonal(nplev_0),Sigma_hr2) %*%
+                         t(Z2_0)
+        } else {
+          if( n_h0[rr] > 0 ){ Xi_h02[[rr]] = Diagonal(n_h0[rr],0) }
         }
       }
     }
@@ -165,11 +166,11 @@ pc_0 = function(xfin, pc)
         }
       }
     }
-    if( any(pc$h[[hh]]$pvc_1 > 0) ){
+    if( pc$pvc_1 > 0 && any(pc$h[[hh]]$pvc_1 > 0) ){
       Xi_h01 = Xi_h01[!sapply(Xi_h01,is.null)]
       Omega = Omega + bdiag(Xi_h01)
     }
-    if( any(pc$h[[hh]]$pvc_1 > 0 & pc$h[[hh]]$pvc_2 > 0) ){
+    if( pc$pvc_2 > 0 && any(pc$h[[hh]]$pvc_2 > 0) ){
       Xi_h02 = Xi_h02[!sapply(Xi_h02,is.null)]
       Omega = Omega + bdiag(Xi_h02)
     }

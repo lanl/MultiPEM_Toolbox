@@ -212,7 +212,11 @@ calc_bayes = function(p_cal,gdir,adir,nst=10,nburn=10000,nmcmc=20000,
   p_cal$p_A = 0
   if( !exists("A",where=p_cal,inherits=FALSE) ){
     for( hh in 1:p_cal$H ){
-      p_cal$p_A = p_cal$p_A + sum(p_cal$h[[hh]]$pvc_1 > 0)
+      if( p_cal$pvc_1 > 0 ){
+        p_cal$p_A = p_cal$p_A + sum(p_cal$h[[hh]]$pvc_1 > 0)
+      } else if( p_cal$pvc_2 > 0 ){
+        p_cal$p_A = p_cal$p_A + sum(p_cal$h[[hh]]$pvc_2 > 0)
+      }
     }
   }
 
@@ -254,7 +258,7 @@ calc_bayes = function(p_cal,gdir,adir,nst=10,nburn=10000,nmcmc=20000,
     p_cal$dfgsn = dfgsn; p_cal$dinvgamma = dinvgamma;
     p_cal$gdfgsn = gdfgsn
   }
-  if( p_cal$pvc_1 > 0 ){ p_cal$lphc = lphc }
+  if( p_cal$pvc_1 > 0 || p_cal$pvc_2 > 0 ){ p_cal$lphc = lphc }
 
   # Source log-posterior and gradient of the log-posterior
   source(paste(gdir,"/log_posterior_full.r",sep=""),local=TRUE)

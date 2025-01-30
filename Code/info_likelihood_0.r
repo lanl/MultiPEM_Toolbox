@@ -58,10 +58,10 @@ info_ll_0 = function(opt, pc)
   # emplacement condition
   if( exists("tbeta",where=opt,inherits=FALSE) ){ tbetaHat = opt$tbeta }
 
-  # extract level 1 variance components
+  # extract source variance components
   if( exists("vc_1",where=opt,inherits=FALSE) ){ vcHat_1 = opt$vc_1 }
 
-  # extract level 2 variance components
+  # extract path variance components
   if( exists("vc_2",where=opt,inherits=FALSE) ){ vcHat_2 = opt$vc_2 }
 
   # extract observational error covariance parameters
@@ -179,29 +179,27 @@ info_ll_0 = function(opt, pc)
     # number of responses for phenomenology "hh"
     Rh = pc$h[[hh]]$Rh
 
-    # construct level 1 variance component
+    # construct source variance component
     # covariance matrices
     if( pc$pvc_1 > 0 && any(pc$h[[hh]]$pvc_1 > 0) ){
       Sigma_hr1 = vector("list",Rh)
-      if( pc$pvc_2 > 0 && any(pc$h[[hh]]$pvc_1 > 0 &
-                              pc$h[[hh]]$pvc_2 > 0) ){
-        Sigma_hr2 = vector("list",Rh)
-      }
       for( rr in 1:Rh ){
         pvc_1 = pc$h[[hh]]$pvc_1[rr]
         if( pvc_1 > 0 ){
           Sigma_hr1[[rr]] = Diagonal(pvc_1,exp(vcHat_1[1:pvc_1]))
           vcHat_1 = vcHat_1[-(1:pvc_1)]
-          # construct level 2 variance component
-          # covariance matrices
-          if( pc$pvc_2 > 0 && any(pc$h[[hh]]$pvc_1 > 0 &
-                                  pc$h[[hh]]$pvc_2 > 0) ){
-            pvc_2 = pc$h[[hh]]$pvc_2[rr]
-            if( pvc_2 > 0 ){
-              Sigma_hr2[[rr]] = Diagonal(pvc_2,exp(vcHat_2[1:pvc_2]))
-              vcHat_2 = vcHat_2[-(1:pvc_2)]
-            }
-          }
+        }
+      }
+    }
+    # construct path variance component
+    # covariance matrices
+    if( pc$pvc_2 > 0 && any(pc$h[[hh]]$pvc_2 > 0) ){
+      Sigma_hr2 = vector("list",Rh)
+      for( rr in 1:Rh ){
+        pvc_2 = pc$h[[hh]]$pvc_2[rr]
+        if( pvc_2 > 0 ){
+          Sigma_hr2[[rr]] = Diagonal(pvc_2,exp(vcHat_2[1:pvc_2]))
+          vcHat_2 = vcHat_2[-(1:pvc_2)]
         }
       }
     }
@@ -348,199 +346,248 @@ info_ll_0 = function(opt, pc)
         }
       }
 
-      for( ii in i_source ){
-        # number of responses for source "ii"
-        n_hi = pc$h[[hh]]$n[[ii]]
-        n_hi_tot = sum(n_hi)
-
-        # setup argument for forward model/jacobian call
-        Arg = "(c(beta_t"
-        if( pm$ncalp > 0 ){
-          if( !pc$h[[hh]]$nev[ii] ){
-            pm$cal = TRUE
-            Arg = paste(Arg,",Cp",sep="")
-          } else { pm$cal = FALSE }
+      # iterate over sources of type "tt" in phenomenology "hh"
+      inev = logical(pc$h[[hh]]$nsource_groups)
+      for( gg in 1:pc$h[[hh]]$nsource_groups ){
+        i_source_g = intersect(i_source,pc$h[[hh]]$Source_Groups[[gg]])
+        if( length(i_source_g) == 0 ){ next }
+        sc = 0
+        tsc = length(i_source_g)
+        for( ii in i_source_g ){
+          if( pc$h[[hh]]$nev[ii] ){ inev[gg] = TRUE; break; }
         }
-        if( "eiv" %in% pnames ){
-          if( !is.null(pc$h[[hh]]$eiv[[ii]]) ){
-            W = wHat_eiv[pc$h[[hh]]$eiv[[ii]]]
-            pm$theta_names = "W"
-            Arg = paste(Arg,",W",sep="")
-          } else {
-            if( exists("theta_names",where=pm,inherits=FALSE) ){
-              rm(theta_names, envir=pm)
+        Jac_th0 = NULL
+        Jac_c = NULL
+        g_w = vector("list",tsc)
+        Jac_0 = NULL
+        Jac_t = NULL
+        Omega = vector("list",tsc)
+        for( ii in i_source_g ){
+          sc = sc + 1
+          # number of responses for source "ii"
+          n_hi = pc$h[[hh]]$n[[ii]]
+          n_hi_tot = sum(n_hi)
+
+          # setup argument for forward model/jacobian call
+          Arg = "(c(beta_t"
+          if( pm$ncalp > 0 ){
+            if( !pc$h[[hh]]$nev[ii] ){
+              pm$cal = TRUE
+              Arg = paste(Arg,",Cp",sep="")
+            } else { pm$cal = FALSE }
+          }
+          if( "eiv" %in% pnames ){
+            if( !is.null(pc$h[[hh]]$eiv[[ii]]) ){
+              W = wHat_eiv[pc$h[[hh]]$eiv[[ii]]]
+              pm$theta_names = "W"
+              Arg = paste(Arg,",W",sep="")
+            } else {
+              if( exists("theta_names",where=pm,inherits=FALSE) ){
+                rm(theta_names, envir=pm)
+              }
             }
           }
-        }
-        if( pc$h[[hh]]$nev[ii] ){
-          if( "itheta0" %in% pnames ){
-            Arg = paste(Arg,",theta0Hat[pc$h[[hh]]$itheta0]",sep="")
-          } else { Arg = paste(Arg,",theta0Hat",sep="") }
-        }
-        Arg=paste(Arg,"),pm)",sep="")
-
-        # named parameters in forward model/jacobian call
-        if( "theta_names" %in% pnames &&
-            !is.null(pc$h[[hh]]$theta_names[[ii]]) ){
-          pm$theta_names = pc$h[[hh]]$theta_names[[ii]]
-        }
-
-        # covariance matrices
-        if( pc$pvc_1 > 0 && any(pc$h[[hh]]$pvc_1 > 0) ){
-          Xi_hi1 = vector("list",Rh)
-          if( pc$pvc_2 > 0 && any(pc$h[[hh]]$pvc_1 > 0 &
-                                  pc$h[[hh]]$pvc_2 > 0) ){
-            Xi_hi2 = vector("list",Rh)
+          if( pc$h[[hh]]$nev[ii] ){
+            if( "itheta0" %in% pnames ){
+              Arg = paste(Arg,",theta0Hat[pc$h[[hh]]$itheta0]",sep="")
+            } else { Arg = paste(Arg,",theta0Hat",sep="") }
           }
-        }
+          Arg=paste(Arg,"),pm)",sep="")
 
-        # Jacobian matrix for new event inference parameters
-        if( pc$h[[hh]]$nev[ii] ){ Jac_th0 = NULL }
+          # named parameters in forward model/jacobian call
+          if( "theta_names" %in% pnames &&
+              !is.null(pc$h[[hh]]$theta_names[[ii]]) ){
+            pm$theta_names = pc$h[[hh]]$theta_names[[ii]]
+          }
 
-        # Jacobian matrix for calibration inference parameters
-        if( pm$cal ){ Jac_c = NULL }
+          # covariance matrices
+          if( pc$pvc_1 > 0 && any(pc$h[[hh]]$pvc_1 > 0) ){
+            Xi_hi1 = vector("list",Rh)
+          }
 
-        # gradient vector for errors-in-variables yield
-        if( "eiv" %in% pnames && !is.null(pc$h[[hh]]$eiv[[ii]]) ){
-          g_w = NULL
-        }
+          # Jacobian matrix for new event inference parameters
+          if( pc$h[[hh]]$nev[ii] ){ Jac_th0_r = NULL
+          } else if( inev[gg] ){
+            Jac_th0 = rbind(Jac_th0,
+                            Matrix(0,n_hi_tot,pc$ntheta0,
+                                   sparse=TRUE,doDiag=FALSE))
+          }
 
-        # Jacobian matrices for forward model parameters
-        if( pbeta > 0 ){
-          Jac_0 = Matrix(0,n_hi_tot,pbeta,sparse=FALSE,doDiag=FALSE)
-        }
-        if( ptbeta > 0 && pc$h[[hh]]$ptbeta[tt] > 0 ){
-          Jac_t = Matrix(0,n_hi_tot,pc$h[[hh]]$ptbeta[tt],
-                         sparse=FALSE,doDiag=FALSE)
-        }
+          # Jacobian matrix for calibration inference parameters
+          if( pm$cal ){ Jac_c_r = NULL
+          } else if( tsc > 1 ){
+            if( exists("cal_par_names",where=pm,inherits=FALSE) ){
+              Jac_c = rbind(Jac_c,
+                            Matrix(0,n_hi_tot,pc$ncalp,
+                                   sparse=TRUE,doDiag=FALSE))
+            }
+          }
 
-        # iterate over responses "rr"
-        for(rr in 1:Rh){
-          if( n_hi[rr] > 0 ){
-            st_nir = 0
-            if( rr > 1 ){ st_nir = sum(n_hi[1:(rr-1)]) }
+          # gradient vector for errors-in-variables yield
+          if( "eiv" %in% pnames && !is.null(pc$h[[hh]]$eiv[[ii]]) ){
+            g_w_r = NULL
+          }
 
-            # covariate matrix for source "ii"
-            pm$X = pc$h[[hh]]$X[[ii]][[rr]]
+          # Jacobian matrices for forward model parameters
+          if( pbeta > 0 ){
+            Jac_0_r = Matrix(0,n_hi_tot,pbeta,sparse=FALSE,doDiag=FALSE)
+          }
+          if( ptbeta > 0 && pc$h[[hh]]$ptbeta[tt] > 0 ){
+            Jac_t_r = Matrix(0,n_hi_tot,pc$h[[hh]]$ptbeta[tt],
+                             sparse=FALSE,doDiag=FALSE)
+          }
 
-            # extract forward model parameters for response "rr"
-            if( pbeta > 0 && pc$h[[hh]]$pbeta[rr] > 0 ){
-              st_beta = 0
-              if( rr > 1 ){ 
-                st_beta = sum(pc$h[[hh]]$pbeta[1:(rr-1)])
+          # iterate over responses "rr"
+          for(rr in 1:Rh){
+            if( n_hi[rr] > 0 ){
+              st_nir = 0
+              if( rr > 1 ){ st_nir = sum(n_hi[1:(rr-1)]) }
+
+              # covariate matrix for source "ii"
+              pm$X = pc$h[[hh]]$X[[ii]][[rr]]
+
+              # extract forward model parameters for response "rr"
+              if( pbeta > 0 && pc$h[[hh]]$pbeta[rr] > 0 ){
+                st_beta = 0
+                if( rr > 1 ){ 
+                  st_beta = sum(pc$h[[hh]]$pbeta[1:(rr-1)])
+                }
+                betar = beta[st_beta+(1:pc$h[[hh]]$pbeta[rr])]
+              } else { betar = NULL }
+              if( ptbeta > 0 && pc$h[[hh]]$pbetat[[tt]][rr] > 0 ){
+                st_betatr = 0
+                if( rr > 1 ){
+                  st_betatr = sum(pc$h[[hh]]$pbetat[[tt]][1:(rr-1)])
+                }
+                betatr = betat[st_betatr+
+                               (1:pc$h[[hh]]$pbetat[[tt]][rr])]
+              } else { betatr = NULL }
+              if( is.null(betatr) ){ beta_t = betar }
+              if( is.null(betar) ){ beta_t = betatr }
+              if( !is.null(betar) && !is.null(betatr) ){
+                beta_t = numeric(pc$h[[hh]]$pbeta[rr]+
+                                 pc$h[[hh]]$pbetat[[tt]][rr])
+                beta_t[pc$h[[hh]]$ibetar[[(tt-1)*Rh+rr]]] = betar
+                beta_t[pc$h[[hh]]$ibetatr[[(tt-1)*Rh+rr]]] = betatr
               }
-              betar = beta[st_beta+(1:pc$h[[hh]]$pbeta[rr])]
-            } else { betar = NULL }
-            if( ptbeta > 0 && pc$h[[hh]]$pbetat[[tt]][rr] > 0 ){
-              st_betatr = 0
-              if( rr > 1 ){
-                st_betatr = sum(pc$h[[hh]]$pbetat[[tt]][1:(rr-1)])
+              pm$pbeta = length(beta_t)
+              if( "iResponse" %in% pnames ){
+                pm$iresp = pc$h[[hh]]$iResponse[rr]
               }
-              betatr = betat[st_betatr+(1:pc$h[[hh]]$pbetat[[tt]][rr])]
-            } else { betatr = NULL }
-            if( is.null(betatr) ){ beta_t = betar }
-            if( is.null(betar) ){ beta_t = betatr }
-            if( !is.null(betar) && !is.null(betatr) ){
-              beta_t = numeric(pc$h[[hh]]$pbeta[rr]+
-                               pc$h[[hh]]$pbetat[[tt]][rr])
-              beta_t[pc$h[[hh]]$ibetar[[(tt-1)*Rh+rr]]] = betar
-              beta_t[pc$h[[hh]]$ibetatr[[(tt-1)*Rh+rr]]] = betatr
-            }
-            pm$pbeta = length(beta_t)
-            if( "iResponse" %in% pnames ){
-              pm$iresp = pc$h[[hh]]$iResponse[rr]
-            }
 
-            # calculate forward model Jacobians
-            gcall = paste("pc$gfm$",pc$h[[hh]]$g[rr],Arg,sep="")
-            jac = eval(parse(text=gcall)) 
+              # calculate forward model Jacobians
+              gcall = paste("pc$gfm$",pc$h[[hh]]$g[rr],Arg,sep="")
+              jac = eval(parse(text=gcall)) 
 
-            # calculate components of Jacobian matrix
-            if( pc$h[[hh]]$nev[ii] ){
-              Jac_th0 = rbind(Jac_th0,jac$jtheta)
-            }
-            if( pm$cal ){
-              Jac_c = rbind(Jac_c,jac$jcalp)
-            }
-            if( "eiv" %in% pnames && !is.null(pc$h[[hh]]$eiv[[ii]]) ){
-              g_w = c(g_w,jac$jtheta)
-            }
-            if( is.list(jac) ){ jac = jac$jbeta }
-            if( is.null(betatr) && pc$h[[hh]]$pbeta[rr] > 0 ){
-              ir = st_nir+(1:n_hi[rr])
-              ic = st_beta+(1:pc$h[[hh]]$pbeta[rr])
-              Jac_0[ir,ic] = jac
-            }
-            if( is.null(betar) && pc$h[[hh]]$pbetat[[tt]][rr] > 0 ){
-              ir = st_nir+(1:n_hi[rr])
-              ic = st_betatr+(1:pc$h[[hh]]$pbetat[[tt]][rr])
-              Jac_t[ir,ic] = jac
-            }
-            if( !is.null(betar) && !is.null(betatr) ){
-              ir = st_nir+(1:n_hi[rr])
-              ic = st_beta+(1:pc$h[[hh]]$pbeta[rr])
-              Jac_0[ir,ic] = jac[,pc$h[[hh]]$ibetar[[(tt-1)*Rh+rr]]]
-              ic = st_betatr+(1:pc$h[[hh]]$pbetat[[tt]][rr])
-              Jac_t[ir,ic] = jac[,pc$h[[hh]]$ibetatr[[(tt-1)*Rh+rr]]]
-            }
+              # calculate components of Jacobian matrix
+              if( pc$h[[hh]]$nev[ii] ){
+                Jac_th0_r = rbind(Jac_th0_r,jac$jtheta)
+              }
+              if( pm$cal ){
+                Jac_c_r = rbind(Jac_c_r,jac$jcalp)
+              }
+              if( "eiv" %in% pnames && !is.null(pc$h[[hh]]$eiv[[ii]]) ){
+                g_w_r = c(g_w_r,jac$jtheta)
+              }
+              if( is.list(jac) ){ jac = jac$jbeta }
+              if( is.null(betatr) && pc$h[[hh]]$pbeta[rr] > 0 ){
+                ir = st_nir+(1:n_hi[rr])
+                ic = st_beta+(1:pc$h[[hh]]$pbeta[rr])
+                Jac_0_r[ir,ic] = jac
+              }
+              if( is.null(betar) && pc$h[[hh]]$pbetat[[tt]][rr] > 0 ){
+                ir = st_nir+(1:n_hi[rr])
+                ic = st_betatr+(1:pc$h[[hh]]$pbetat[[tt]][rr])
+                Jac_t_r[ir,ic] = jac
+              }
+              if( !is.null(betar) && !is.null(betatr) ){
+                ir = st_nir+(1:n_hi[rr])
+                ic = st_beta+(1:pc$h[[hh]]$pbeta[rr])
+                Jac_0_r[ir,ic] = jac[,pc$h[[hh]]$ibetar[[(tt-1)*Rh+rr]]]
+                ic = st_betatr+(1:pc$h[[hh]]$pbetat[[tt]][rr])
+                Jac_t_r[ir,ic] =
+                  jac[,pc$h[[hh]]$ibetatr[[(tt-1)*Rh+rr]]]
+              }
     
-            # calculate components of model covariance matrix
-            if( pc$pvc_1 > 0 && any(pc$h[[hh]]$pvc_1 > 0) ){
-              if( pc$h[[hh]]$pvc_1[rr] > 0 ){
-                Xi_hi1[[rr]] = pc$h[[hh]]$Z1[[ii]][[rr]] %*%
-                               Sigma_hr1[[rr]] %*%
-                               t(pc$h[[hh]]$Z1[[ii]][[rr]])
-              } else { Xi_hi1[[rr]] = Diagonal(n_hi[rr],0) }
-              if( pc$pvc_2 > 0 && any(pc$h[[hh]]$pvc_1 > 0 &
-                                      pc$h[[hh]]$pvc_2 > 0) ){
-                if( pc$h[[hh]]$pvc_1[rr] > 0 ){
-                  if( pc$h[[hh]]$pvc_2[rr] > 0 ){
-                    Xi_hi2[[rr]] = pc$h[[hh]]$Z2[[ii]][[rr]] %*%
-                            kronecker(Diagonal(pc$h[[hh]]$nplev[ii,rr]),
-                                      Sigma_hr2[[rr]]) %*%
-                            t(pc$h[[hh]]$Z2[[ii]][[rr]])
-                  } else { Xi_hi2[[rr]] = Diagonal(n_hi[rr],0) }
-                } else { Xi_hi2[[rr]] = Diagonal(n_hi[rr],0) }
+              # calculate components of model covariance matrix
+              if( pc$pvc_1 > 0 && any(pc$h[[hh]]$pvc_1 > 0) ){
+                if( pc$h[[hh]]$pvc_1[rr] > 0 &&
+                    !is.null(pc$h[[hh]]$Z1[[ii]][[rr]]) ){
+                  Xi_hi1[[rr]] = pc$h[[hh]]$Z1[[ii]][[rr]] %*%
+                                 Sigma_hr1[[rr]] %*%
+                                 t(pc$h[[hh]]$Z1[[ii]][[rr]])
+                } else { Xi_hi1[[rr]] = Diagonal(n_hi[rr],0) }
               }
             }
           }
-        }
+          if( pc$h[[hh]]$nev[ii] ){
+            Jac_th0 = rbind(Jac_th0, Jac_th0_r)
+          }
+          if( pm$cal ){ Jac_c = rbind(Jac_c, Jac_c_r) }
+          if( "eiv" %in% pnames ){
+            if( is.null(pc$h[[hh]]$eiv[[ii]]) ){
+              for( isc in 1:tsc ){
+                g_w[[isc]] = c(g_w[[isc]], numeric(n_hi_tot))
+              }
+            } else {
+              g_w[[sc]] = c(g_w[[sc]], g_w_r)
+              for( isc in setdiff(1:tsc,sc) ){
+                g_w[[isc]] = c(g_w[[isc]], numeric(n_hi_tot))
+              }
+            }
+          }
+          if( pbeta > 0 ){ Jac_0 = rbind(Jac_0, Jac_0_r) }
+          if( ptbeta > 0 && pc$h[[hh]]$ptbeta[tt] > 0 ){
+            Jac_t = rbind(Jac_t, Jac_t_r)
+          }
 
-        # calculate model covariance matrix
-        Omega = Matrix(0,n_hi_tot,n_hi_tot,sparse=FALSE,doDiag=FALSE)
-        for( r1 in 1:Rh ){
-          if( n_hi[r1] > 0 ){
-            st_nir1 = 0
-            if( r1 > 1 ){ st_nir1 = sum(n_hi[1:(r1-1)]) }
-            ir = st_nir1+(1:n_hi[r1])
-            for( r2 in r1:Rh ){
-              if( n_hi[r2] > 0 ){
-                st_nir2 = 0
-                if( r2 > 1 ){ st_nir2 = sum(n_hi[1:(r2-1)]) }
-                ic = st_nir2+(1:n_hi[r2])
-                Sigma_hi = Matrix(0,n_hi[r1],n_hi[r2],sparse=FALSE,
-                                  doDiag=FALSE)
-                Sigma_hi[pc$h[[hh]]$i[[ii]]$cov_pairs[[r1]][[r2]]] =
-                  Sigma_h[r1,r2]
-                Omega[ir,ic] = Sigma_hi
-                if( r2 > r1 ){ Omega[ic,ir] = t(Sigma_hi) }
+          # calculate model covariance matrix
+          Omega[[sc]] = Matrix(0,n_hi_tot,n_hi_tot,sparse=FALSE,
+                               doDiag=FALSE)
+          for( r1 in 1:Rh ){
+            if( n_hi[r1] > 0 ){
+              st_nir1 = 0
+              if( r1 > 1 ){ st_nir1 = sum(n_hi[1:(r1-1)]) }
+              ir = st_nir1+(1:n_hi[r1])
+              for( r2 in r1:Rh ){
+                if( n_hi[r2] > 0 ){
+                  st_nir2 = 0
+                  if( r2 > 1 ){ st_nir2 = sum(n_hi[1:(r2-1)]) }
+                  ic = st_nir2+(1:n_hi[r2])
+                  Sigma_hi = Matrix(0,n_hi[r1],n_hi[r2],sparse=FALSE,
+                                    doDiag=FALSE)
+                  Sigma_hi[pc$h[[hh]]$i[[ii]]$cov_pairs[[r1]][[r2]]] =
+                    Sigma_h[r1,r2]
+                  Omega[[sc]][ir,ic] = Sigma_hi
+                  if( r2 > r1 ){ Omega[[sc]][ic,ir] = t(Sigma_hi) }
+                }
               }
             }
           }
+          if( pc$pvc_1 > 0 && any(pc$h[[hh]]$pvc_1 > 0) ){
+            Xi_hi1 = Xi_hi1[!sapply(Xi_hi1,is.null)]
+            Omega[[sc]] = Omega[[sc]] + bdiag(Xi_hi1)
+          }
         }
-        if( any(pc$h[[hh]]$pvc_1 > 0) ){
-          Xi_hi1 = Xi_hi1[!sapply(Xi_hi1,is.null)]
-          Omega = Omega + bdiag(Xi_hi1)
-        }
-        if( any(pc$h[[hh]]$pvc_1 > 0 & pc$h[[hh]]$pvc_2 > 0) ){
-          Xi_hi2 = Xi_hi2[!sapply(Xi_hi2,is.null)]
-          Omega = Omega + bdiag(Xi_hi2)
+        Omega = bdiag(Omega[!sapply(Omega,is.null)])
+        if( pc$pvc_2 > 0 && any(pc$h[[hh]]$pvc_2 > 0) ){
+          for( rr in 1:Rh ){
+            if( pc$h[[hh]]$pvc_2[rr] > 0 &&
+                !is.null(pc$h[[hh]]$Z2[[gg]][[rr]]) ){
+              ic = pc$h[[hh]]$Omega_ic[[gg]][[rr]]
+              Omega[ic,ic] = Omega[ic,ic] + pc$h[[hh]]$Z2[[gg]][[rr]] %*%
+                             kronecker(Diagonal(pc$h[[hh]]$nplev[gg,rr]),
+                                       Sigma_hr2[[rr]]) %*%
+                             t(pc$h[[hh]]$Z2[[gg]][[rr]])
+            }
+          }
         }
         Catch = pc$tryCatch.W.E(chol(Omega))
         if( is(Catch$value,"Matrix") ){ cOmega = Catch$value
         } else {
           cat("Omega is not positive definite.\n")
-          return(Cmat)
+          Omega = nearPD(Omega)$mat
+          cOmega = chol(Omega)
         }
         IOmega = chol2inv(cOmega)
 
@@ -564,7 +611,7 @@ info_ll_0 = function(opt, pc)
         }
 
         # information matrix for new event inference parameters
-        if( pc$h[[hh]]$nev[ii] ){
+        if( inev[gg] ){
           if( "itheta0" %in% pnames ){
             I_nev[pc$h[[hh]]$itheta0,pc$h[[hh]]$itheta0] =
               I_nev[pc$h[[hh]]$itheta0,pc$h[[hh]]$itheta0] +
@@ -576,7 +623,7 @@ info_ll_0 = function(opt, pc)
 
         # list of "cross" information matrices between common forward
         # model coefficients and new event inference parameters
-        if( pc$h[[hh]]$nev[ii] ){
+        if( inev[gg] ){
           if( pbeta > 0 ){
             if( "itheta0" %in% pnames ){
               I_0_nev[[hh]][,pc$h[[hh]]$itheta0] =
@@ -590,7 +637,7 @@ info_ll_0 = function(opt, pc)
         # list of "cross" information matrices between emplacement
         # condition dependent forward model coefficients and new event
         # inference parameters
-        if( pc$h[[hh]]$nev[ii] ){
+        if( inev[gg] ){
           if( ptbeta > 0 ){
             if( "itheta0" %in% pnames ){
               I_t_nev[[hh]][[tt]][,pc$h[[hh]]$itheta0] =
@@ -621,25 +668,29 @@ info_ll_0 = function(opt, pc)
 
         # compute components of information matrices needed for
         # errors-in-variables correction
-        if( "eiv" %in% pnames && !is.null(pc$h[[hh]]$eiv[[ii]]) ){
-          I_wc[pc$h[[hh]]$eiv[[ii]],pc$h[[hh]]$eiv[[ii]]] =
-            I_wc[pc$h[[hh]]$eiv[[ii]],pc$h[[hh]]$eiv[[ii]]] +
-            t(g_w) %*% IOmega %*% g_w
-          if( pbeta > 0 ){
-            I_0w[[hh]][,pc$h[[hh]]$eiv[[ii]]] =
-              t(Jac_0) %*% IOmega %*% g_w
-            if( ptbeta > 0 && !is.null(I_tw[[hh]][[tt]]) ){
+        sc = 0
+        for( ii in i_source_g ){
+          sc = sc + 1
+          if( "eiv" %in% pnames && !is.null(pc$h[[hh]]$eiv[[ii]]) ){
+            I_wc[pc$h[[hh]]$eiv[[ii]],pc$h[[hh]]$eiv[[ii]]] =
+              I_wc[pc$h[[hh]]$eiv[[ii]],pc$h[[hh]]$eiv[[ii]]] +
+              t(g_w[[sc]]) %*% IOmega %*% g_w[[sc]]
+            if( pbeta > 0 ){
+              I_0w[[hh]][,pc$h[[hh]]$eiv[[ii]]] =
+                t(Jac_0) %*% IOmega %*% g_w[[sc]]
+              if( ptbeta > 0 && !is.null(I_tw[[hh]][[tt]]) ){
+                I_tw[[hh]][[tt]][,pc$h[[hh]]$eiv[[ii]]] =
+                  t(Jac_t) %*% IOmega %*% g_w[[sc]]
+              }
+            } else if( ptbeta > 0 && !is.null(I_tw[[hh]][[tt]]) ){
               I_tw[[hh]][[tt]][,pc$h[[hh]]$eiv[[ii]]] =
-                t(Jac_t) %*% IOmega %*% g_w
+                t(Jac_t) %*% IOmega %*% g_w[[sc]]
             }
-          } else if( ptbeta > 0 && !is.null(I_tw[[hh]][[tt]]) ){
-            I_tw[[hh]][[tt]][,pc$h[[hh]]$eiv[[ii]]] =
-              t(Jac_t) %*% IOmega %*% g_w
-          }
-          if( pm$cal ){
-            I_pw[csub,pc$h[[hh]]$eiv[[ii]]] =
-              I_pw[csub,pc$h[[hh]]$eiv[[ii]]] +
-              t(Jac_c) %*% IOmega %*% g_w
+            if( pm$cal ){
+              I_pw[csub,pc$h[[hh]]$eiv[[ii]]] =
+                I_pw[csub,pc$h[[hh]]$eiv[[ii]]] +
+                t(Jac_c) %*% IOmega %*% g_w[[sc]]
+            }
           }
         }
       }
@@ -712,7 +763,8 @@ info_ll_0 = function(opt, pc)
   if( is(Catch$value,"Matrix") ){ CI_nev_0 = Catch$value
   } else {
     cat("I_0(theta_0) is not positive definite.\n")
-    return(Cmat)
+    I_nev_0 = nearPD(I_nev_0)$mat
+    CI_nev_0 = chol(I_nev_0)
   }
   II_nev_0 = chol2inv(CI_nev_0)
   Cmat$II_nev_0 = II_nev_0
@@ -722,7 +774,8 @@ info_ll_0 = function(opt, pc)
     if( is(Catch$value,"Matrix") ){ C_pp = Catch$value
     } else {
       cat("I_c(calp) is not positive definite.\n")
-      return(Cmat)
+      I_pp = nearPD(I_pp)$mat
+      C_pp = chol(I_pp)
     }
     II_pp = chol2inv(C_pp)
   }
@@ -743,7 +796,8 @@ info_ll_0 = function(opt, pc)
       } else {
         cat("I(beta) is not positive definite.\n")
       }
-      return(Cmat)
+      S_bb = nearPD(S_bb)$mat
+      C_bb = chol(S_bb)
     }
     IS_bb = chol2inv(C_bb)
     S_b0 = do.call(rbind,I_b0)
@@ -762,7 +816,8 @@ info_ll_0 = function(opt, pc)
       if( is(Catch$value,"Matrix") ){ C_ww = Catch$value
       } else {
         cat("Adjusted I(eiv) is not positive definite.\n")
-        return(Cmat)
+        S_ww = nearPD(S_ww)$mat
+        C_ww = chol(S_ww)
       }
       IS_ww = chol2inv(C_ww)
       S_00 = S_00 - T_0b %*% S_bw %*% IS_ww %*% t(S_bw) %*% t(T_0b)
@@ -772,7 +827,8 @@ info_ll_0 = function(opt, pc)
     if( is(Catch$value,"Matrix") ){ C_00 = Catch$value
     } else {
       cat("Adjusted I(theta_0) is not positive definite.\n")
-      return(Cmat)
+      S_00 = nearPD(S_00)$mat
+      C_00 = chol(S_00)
     }
     IS_00 = chol2inv(C_00)
   } else { IS_00 = II_nev_0 }
@@ -834,7 +890,8 @@ info_ll_0 = function(opt, pc)
         cat(paste("Adjusted I(theta_0) (untransformed theta_0) is ",
                   "not positive definite.\n",sep=""))
       }
-      return(Cmat)
+      I_nev_it = nearPD(I_nev_it)$mat
+      CI_nev_it = chol(I_nev_it)
     }
     II_nev_it = chol2inv(CI_nev_it)
     Cmat$II_nev_it = II_nev_it
@@ -845,7 +902,8 @@ info_ll_0 = function(opt, pc)
       } else {
         cat(paste("I_0(theta_0) (untransformed theta_0) is ",
                   "not positive definite.\n",sep=""))
-        return(Cmat)
+        I_nev_0_it = nearPD(I_nev_0_it)$mat
+        CI_nev_0_it = chol(I_nev_0_it)
       }
       II_nev_0_it = chol2inv(CI_nev_0_it)
       Cmat$II_nev_0_it = II_nev_0_it
@@ -868,7 +926,8 @@ info_ll_0 = function(opt, pc)
       if( is(Catch$value,"Matrix") ){ C_bb = Catch$value
       } else {
         cat("Adjusted I(beta) is not positive definite.\n")
-        return(Cmat)
+        S_bb = nearPD(S_bb)$mat
+        C_bb = chol(S_bb)
       }
       IS_bb = chol2inv(C_bb)
       S_bc = do.call(rbind,I_bc)
@@ -890,7 +949,8 @@ info_ll_0 = function(opt, pc)
         } else {
           cat("I(eiv) is not positive definite.\n")
         }
-        return(Cmat)
+        S_ww = nearPD(S_ww)$mat
+        C_ww = chol(S_ww)
       }
       IS_ww = chol2inv(C_ww)
       S_pp = S_pp - S_cw %*% IS_ww %*% t(S_cw)
@@ -902,7 +962,8 @@ info_ll_0 = function(opt, pc)
       if( is(Catch$value,"Matrix") ){ C_pp = Catch$value
       } else {
         cat("Adjusted I(calp) is not positive definite.\n")
-        return(Cmat)
+        S_pp = nearPD(S_pp)$mat
+        C_pp = chol(S_pp)
       }
       II_pp = chol2inv(C_pp)
     }

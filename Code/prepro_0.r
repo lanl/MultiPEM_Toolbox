@@ -127,6 +127,7 @@ prepro_0 = function(p_cal,gdir,adir,rdir,ndir,tnames,nimp=1,bopt=FALSE,
   # count number of sources by phenomenology
   source_levels = p_cal$source_levels
   nsource = p_cal$ncsource
+  nsource_groups = p_cal$nsource_groups
   # include new event source name
   for( hh in 1:p_cal$H ){
     if( "Source" %in% names(new_data[[hh]]) ){
@@ -142,11 +143,18 @@ prepro_0 = function(p_cal,gdir,adir,rdir,ndir,tnames,nimp=1,bopt=FALSE,
       stop(paste("Only one new event permitted for ",
                  "Phenomenology ",hh,".",sep=""))
     }
+    nsource_groups[hh] = nsource_groups[hh]+1
   }
   # count outputs by phenomenology, source, path, response
   for( hh in 1:p_cal$H ){
     # total number of sources
     p_cal$h[[hh]]$nsource = nsource[hh]
+    # total number of source groups
+    p_cal$h[[hh]]$nsource_groups = nsource_groups[hh]
+    # add source group for new event
+    p_cal$h[[hh]]$Source_Groups = c(p_cal$h[[hh]]$Source_Groups,
+                                    vector("list",1))
+    p_cal$h[[hh]]$Source_Groups[[nsource_groups[hh]]] = nsource[hh]
     # response matrix
     p_cal$h[[hh]]$Y = c(p_cal$h[[hh]]$Y,vector("list",1))
     # covariate matrix
@@ -155,10 +163,16 @@ prepro_0 = function(p_cal,gdir,adir,rdir,ndir,tnames,nimp=1,bopt=FALSE,
     p_cal$h[[hh]]$n = c(p_cal$h[[hh]]$n,vector("list",1))
     # covariance pairs
     p_cal$h[[hh]]$i = c(p_cal$h[[hh]]$i,vector("list",1))
-    # path count
+    # source group membership
+    p_cal$h[[hh]]$Source = c(p_cal$h[[hh]]$Source,vector("list",1))
+    # source group path membership
+    p_cal$h[[hh]]$Path = c(p_cal$h[[hh]]$Path,vector("list",1))
+    # source group sample size
+    p_cal$h[[hh]]$ng = c(p_cal$h[[hh]]$ng,vector("list",1))
+    # source group path count
     p_cal$h[[hh]]$nplev = rbind(p_cal$h[[hh]]$nplev,
                                 rep(0,p_cal$h[[hh]]$Rh))
-    # sample size (hijr)
+    # source group path positions (hijr)
     p_cal$nh[[hh]]$i = c(p_cal$nh[[hh]]$i,vector("list",1))
     # include new event source information
     if( "Source" %in% names(new_data[[hh]]) ){
@@ -212,21 +226,31 @@ prepro_0 = function(p_cal,gdir,adir,rdir,ndir,tnames,nimp=1,bopt=FALSE,
     }
     p_cal$h[[hh]]$nev = logical(nsource[hh])
     p_cal$h[[hh]]$nev[nsource[hh]] = TRUE
+    p_cal$h[[hh]]$Source[[nsource_groups[hh]]] = vector("list",Rh[hh])
+    p_cal$h[[hh]]$Path[[nsource_groups[hh]]] = vector("list",Rh[hh])
     # number of paths for new event
-    p_cal$nh[[hh]]$i[[nsource[hh]]]$r = vector("list",p_cal$h[[hh]]$Rh)
+    p_cal$nh[[hh]]$i[[nsource_groups[hh]]]$r = vector("list",p_cal$h[[hh]]$Rh)
     for( rr in 1:p_cal$h[[hh]]$Rh ){
       if( p_cal$h[[hh]]$n[[nsource[hh]]][rr] > 0 ){
+        p_cal$h[[hh]]$Source[[nsource_groups[hh]]][[rr]] =
+          c(p_cal$h[[hh]]$Source[[nsource_groups[hh]]][[rr]],
+            source_levels$h[[hh]][nsource[hh]])
         if( !is.null(p_cal$h[[hh]]$X[[nsource[hh]]][[rr]]) &&
             "Path" %in% names(p_cal$h[[hh]]$X[[nsource[hh]]][[rr]]) ){
           lpath =
             levels(factor(p_cal$h[[hh]]$X[[nsource[hh]]][[rr]]$Path))
+          p_cal$h[[hh]]$Path[[nsource_groups[hh]]][[rr]] = lpath
           npath = length(lpath)
-          p_cal$h[[hh]]$nplev[nsource[hh],rr] = npath
-          p_cal$nh[[hh]]$i[[nsource[hh]]]$r[[rr]] = numeric(npath)
+          p_cal$h[[hh]]$ng[[nsource_groups[hh]]][rr] =
+            p_cal$h[[hh]]$n[[nsource[hh]]][rr]
+          p_cal$h[[hh]]$nplev[nsource_groups[hh],rr] = npath
+          p_cal$nh[[hh]]$i[[nsource_groups[hh]]]$r[[rr]]$p =
+            vector("list",npath)
           for( ss in 1:npath ){
-            ipath = (p_cal$h[[hh]]$X[[nsource[hh]]][[rr]]$Path ==
-                     lpath[ss])
-            p_cal$nh[[hh]]$i[[nsource[hh]]]$r[[rr]][ss] = sum(ipath)
+            ipath = which(p_cal$h[[hh]]$X[[nsource[hh]]][[rr]]$Path ==
+                          lpath[ss])
+            p_cal$nh[[hh]]$i[[nsource_groups[hh]]]$r[[rr]]$p[[ss]] =
+              ipath
           }
         }
       }
@@ -263,7 +287,7 @@ prepro_0 = function(p_cal,gdir,adir,rdir,ndir,tnames,nimp=1,bopt=FALSE,
   }
 
   # Variance component coefficient matrices
-  if( p_cal$pvc_1 > 0 ){
+  if( p_cal$pvc_1 > 0 || p_cal$pvc_2 > 0 ){
     if( p_cal$izmat ){
       # place code calc_zmat_0.r in application directory
       source(paste(adir,"/calc_zmat_0.r",sep=""),local=TRUE)
@@ -271,6 +295,27 @@ prepro_0 = function(p_cal,gdir,adir,rdir,ndir,tnames,nimp=1,bopt=FALSE,
       source(paste(gdir,"/calc_zmat_0.r",sep=""),local=TRUE)
     }
     p_cal = calc_zmat_0(p_cal)
+  }
+
+  # Index covariance matrix by response within new event
+  for( hh in 1:p_cal$H ){
+    if( p_cal$pvc_2 > 0 && any(p_cal$h[[hh]]$pvc_2 > 0) ){
+      Omega_ic = c(p_cal$h[[hh]]$Omega_ic,vector("list",1))
+      Omega_ic[[nsource_groups[hh]]] = vector("list",Rh[hh])
+      ntot = 0
+      for( ii in p_cal$h[[hh]]$Source_Groups[[nsource_groups[hh]]] ){
+        for( rr in 1:Rh[hh] ){
+          if( pvc_2[[hh]][rr] > 0 &&
+            p_cal$h[[hh]]$n[[ii]][rr] > 0 ){
+            Omega_ic[[nsource_groups[hh]]][[rr]] =
+              c(Omega_ic[[nsource_groups[hh]]][[rr]],
+                ntot + 1:p_cal$h[[hh]]$n[[ii]][rr])
+          }
+          ntot = ntot + p_cal$h[[hh]]$n[[ii]][rr]
+        }
+      }
+      p_cal$h[[hh]]$Omega_ic = Omega_ic
+    }
   }
 
   #

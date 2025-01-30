@@ -25,7 +25,7 @@ calc_zmat_0 = function(pc=p_cal)
     for( hh in 1:pc$H ){
       nsource = pc$h[[hh]]$nsource
       if( any(pc$h[[hh]]$pvc_1 > 0) ){
-        # Level 1
+        # Source
         pc$h[[hh]]$Z1 = c(pc$h[[hh]]$Z1,vector("list",1))
         pc$h[[hh]]$Z1[[nsource]] = vector("list",pc$h[[hh]]$Rh)
         for( rr in 1:pc$h[[hh]]$Rh ){
@@ -36,30 +36,24 @@ calc_zmat_0 = function(pc=p_cal)
           }
         }
       }
-      if( pc$pvc_2 > 0 ){
-        if( any(pc$h[[hh]]$pvc_1 > 0 & pc$h[[hh]]$pvc_2 > 0) ){
-          # Level 2 
-          pc$h[[hh]]$Z2 = c(pc$h[[hh]]$Z2,vector("list",1))
-          pc$h[[hh]]$Z2[[nsource]] = vector("list",pc$h[[hh]]$Rh)
-          for( rr in 1:pc$h[[hh]]$Rh ){
-            if( pc$h[[hh]]$pvc_1[rr] > 0 ){
-              if( pc$h[[hh]]$pvc_2[rr] > 0 &&
-                  pc$h[[hh]]$n[[nsource]][rr] > 0 ){
-                pc$h[[hh]]$Z2[[nsource]][[rr]] =
-                Matrix(0,pc$h[[hh]]$n[[nsource]][rr],
-                         pc$h[[hh]]$nplev[nsource,rr],doDiag=FALSE)
-                for( ss in 1:pc$h[[hh]]$nplev[nsource,rr] ){
-                  st_nhijr = 0
-                  if( ss > 1 ){
-                    st_nhijr =
-                    sum(pc$nh[[hh]]$i[[nsource]]$r[[rr]][1:(ss-1)])
-                  }
-                  pc$h[[hh]]$Z2[[nsource]][[rr]][st_nhijr+
-                    (1:pc$nh[[hh]]$i[[nsource]]$r[[rr]][ss]),ss] =
-                  Matrix(rep(1,pc$nh[[hh]]$i[[nsource]]$r[[rr]][ss],
-                         ncol=1))
-                }
-              }
+    }
+  }
+  if( pc$pvc_2 > 0 ){
+    for( hh in 1:pc$H ){
+      nsource = pc$h[[hh]]$nsource_groups
+      if( any(pc$h[[hh]]$pvc_2 > 0) ){
+        # Path
+        pc$h[[hh]]$Z2 = c(pc$h[[hh]]$Z2,vector("list",1))
+        pc$h[[hh]]$Z2[[nsource]] = vector("list",pc$h[[hh]]$Rh)
+        for( rr in 1:pc$h[[hh]]$Rh ){
+          if( pc$h[[hh]]$pvc_2[rr] > 0 &&
+              pc$h[[hh]]$ng[[nsource]][rr] > 0 ){
+            pc$h[[hh]]$Z2[[nsource]][[rr]] =
+            Matrix(0,pc$h[[hh]]$ng[[nsource]][rr],
+                     pc$h[[hh]]$nplev[nsource,rr],doDiag=FALSE)
+            for( ss in 1:pc$h[[hh]]$nplev[nsource,rr] ){
+              ir = p_cal$nh[[hh]]$i[[nsource]]$r[[rr]]$p[[ss]]
+              pc$h[[hh]]$Z2[[nsource]][[rr]][ir,ss] = 1
             }
           }
         }

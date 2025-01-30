@@ -124,13 +124,13 @@ lprior = function(x, pc)
     tbeta_all = x[1:pc$ptbeta]
     x = x[-(1:pc$ptbeta)]
   }
-  # extract level 1 variance components
+  # extract source variance components
   if( pc$pvc_1 > 0 ){
     vc1_all = x[1:pc$pvc_1]
     x = x[-(1:pc$pvc_1)]
   }
-  # extract level 2 variance components
-  if( pc$pvc_1 > 0 && pc$pvc_2 > 0 ){
+  # extract path variance components
+  if( pc$pvc_2 > 0 ){
     vc2_all = x[1:pc$pvc_2]
     x = x[-(1:pc$pvc_2)]
   }
@@ -167,19 +167,18 @@ lprior = function(x, pc)
     # extract variance component parameters for
     # phenomenology "hh"
     if( pc$pvc_1 > 0 && any(pc$h[[hh]]$pvc_1 > 0) ){
-      # level 1
+      # source
       pvc_1 = sum(pc$h[[hh]]$pvc_1)
       lvc_1 = vc1_all[1:pvc_1]
       vc_1 = exp(lvc_1)
       vc1_all = vc1_all[-(1:pvc_1)]
-      if( pc$pvc_2 > 0 && any(pc$h[[hh]]$pvc_1 > 0 &
-                              pc$h[[hh]]$pvc_2 > 0) ){
-        # level 2
-        pvc_2 = sum(pc$h[[hh]]$pvc_2)
-        lvc_2 = vc2_all[1:pvc_2]
-        vc_2 = exp(lvc_2)
-        vc2_all = vc2_all[-(1:pvc_2)]
-      }
+    }
+    if( pc$pvc_2 > 0 && any(pc$h[[hh]]$pvc_2 > 0) ){
+      # path
+      pvc_2 = sum(pc$h[[hh]]$pvc_2)
+      lvc_2 = vc2_all[1:pvc_2]
+      vc_2 = exp(lvc_2)
+      vc2_all = vc2_all[-(1:pvc_2)]
     }
 
     # number of responses for phenomenology "hh"
@@ -253,25 +252,30 @@ lprior = function(x, pc)
         lvc_r = lvc_1[st_vc1+(1:pc$h[[hh]]$pvc_1[rr])]
         vc_r = vc_1[st_vc1+(1:pc$h[[hh]]$pvc_1[rr])]
         if( !("A" %in% pnames0) ){ iA = iA+1 }
-        # level 1
+        # source 
         lp = lp + pc$lphc(lvc_r,vc_r,lA[iA],A[iA])
         # jacobian
         lp = lp + sum(lvc_r)
-        if( pc$pvc_2 > 0 && any(pc$h[[hh]]$pvc_1 > 0 &
-                                pc$h[[hh]]$pvc_2 > 0) ){
-          if( pc$h[[hh]]$pvc_2[rr] > 0 ){
-            st_vc2 = 0 
-            if( rr > 1 ){
-              st_vc2 = sum(pc$h[[hh]]$pvc_2[1:(rr-1)])
-            }
-            lvc_r = lvc_2[st_vc2+(1:pc$h[[hh]]$pvc_2[rr])]
-            vc_r = vc_2[st_vc2+(1:pc$h[[hh]]$pvc_2[rr])]
-            # level 2 
-            lp = lp + pc$lphc(lvc_r,vc_r,lA[iA],A[iA])
-            # jacobian
-            lp = lp + sum(lvc_r)
+      }
+      if( pc$pvc_2 > 0 && pc$h[[hh]]$pvc_2[rr] > 0 ){
+        st_vc2 = 0 
+        if( rr > 1 ){
+          st_vc2 = sum(pc$h[[hh]]$pvc_2[1:(rr-1)])
+        }
+        lvc_r = lvc_2[st_vc2+(1:pc$h[[hh]]$pvc_2[rr])]
+        vc_r = vc_2[st_vc2+(1:pc$h[[hh]]$pvc_2[rr])]
+        if( !("A" %in% pnames0) ){
+          if( pc$pvc_1 == 0 || pc$h[[hh]]$pvc_1[rr] == 0 ){
+            iA = iA+1
           }
         }
+        # path 
+        lp = lp + pc$lphc(lvc_r,vc_r,lA[iA],A[iA])
+        # jacobian
+        lp = lp + sum(lvc_r)
+      }
+      if( (pc$pvc_1 > 0 && pc$h[[hh]]$pvc_1[rr] > 0) ||
+          (pc$pvc_2 > 0 && pc$h[[hh]]$pvc_2[rr] > 0) ){
         if( !("A" %in% pnames0) ){
           # log prior for scale parameter A
           lp = lp + 0
