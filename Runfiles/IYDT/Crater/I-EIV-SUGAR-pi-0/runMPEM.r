@@ -125,7 +125,10 @@ pvc_2 = FALSE
 if( pvc_2 ){
   pvc_2 = vector("list",length(Rh))
   for( hh in 1:length(Rh) ){ pvc_2[[hh]] = numeric(Rh[hh]) }
-} else { pvc_2 = NULL }
+
+  # path error models by phenomenology
+  ptype = vector("list",length(Rh))
+} else { pvc_2 = NULL; ptype = NULL; }
 
 # Set flag for user-provided code to calculate variance
 # component coefficient matrices
@@ -135,7 +138,7 @@ calc_Z = FALSE
 p_cal = prepro_cal(gen_dir,app_dir,dat_dir,dat_cal,Rh,pbeta,
                    izmat=calc_Z,ieiv=ieiv,seiv=seiv,ewsd=eiv_w_sd,
                    Th=Th,pbetat=pbetat,ibetar=ibetar,pvc_1=pvc_1,
-                   pvc_2=pvc_2)
+                   pvc_2=pvc_2,ptype=ptype)
 save.image()
 
 #

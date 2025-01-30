@@ -125,7 +125,10 @@ if( pvc_2 ){
   for( hh in 1:length(Rh) ){ pvc_2[[hh]] = numeric(Rh[hh]) }
   # phenomenology 1
   pvc_2[[1]] = c(1,1) 
-} else { pvc_2 = NULL }
+
+  # path error models by phenomenology
+  ptype = vector("list",length(Rh))
+} else { pvc_2 = NULL; ptype = NULL; }
 
 # Set flag for user-provided code to calculate variance
 # component coefficient matrices
@@ -187,8 +190,9 @@ if( nev ){
 tmp = prepro(gen_dir,app_dir,dat_dir,dat_cal,Rh,pbeta,bopt=opt_B,
              nev=nev,itr=itransform,izmat=calc_Z,ieiv=ieiv,seiv=seiv,
              ewsd=eiv_w_sd,Th=Th,pbetat=pbetat,ibetar=ibetar,
-             pvc_1=pvc_1,pvc_2=pvc_2,tnames=theta_names,fp_tr=tPars,
-             tlb=lb_theta0,tub=ub_theta0,ndir=dat_new,tsub=tsub)
+             pvc_1=pvc_1,pvc_2=pvc_2,ptype=ptype,tnames=theta_names,
+             fp_tr=tPars,tlb=lb_theta0,tub=ub_theta0,ndir=dat_new,
+             tsub=tsub)
 if( opt_B ){
   p_cal = tmp$p_cal
   t_cal = tmp$t_cal
