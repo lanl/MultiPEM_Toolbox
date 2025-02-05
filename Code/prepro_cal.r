@@ -163,16 +163,26 @@ prepro_cal = function(gdir,adir,rdir,cdir,Rh,pbeta,izmat=FALSE,
         p_cal$h[[hh]]$Source_Groups = vector("list",1)
         qq = 1
         while( length(s_gp) > 0 ){
-          S_dep_1 = dep_s(S_dep,s_gp[1])
-          is1 = rownames(S_dep_1)
+          sg = source_levels$h[[hh]][which(S_dep[s_gp[1],] == 1)]
           sg1 = NULL
-          for( jj in is1 ){
-            sg1 = c(sg1,source_levels$h[[hh]][which(S_dep_1[jj,] == 1)])
+          for( ss in sg ){
+            sg1 = c(sg1,source_levels$h[[hh]][which(S_dep[ss,] == 1)])
           }
           sg1 = sort(unique(sg1))
+          diff1 = setdiff(sg1,sg)
+          sg = sg1
+          while( length(diff1) > 0 ){
+            sg1 = NULL
+            for( ss in diff1 ){
+              sg1 = c(sg1,source_levels$h[[hh]][which(S_dep[ss,] == 1)])
+            }
+            sg1 = union(sg,sort(unique(sg1)))
+            diff1 = setdiff(sg1,sg)
+            sg = sg1
+          }
           p_cal$h[[hh]]$Source_Groups[[qq]] =
-            which(source_levels$h[[hh]] %in% sg1)
-          s_gp = s_gp[!(s_gp %in% sg1)]
+            which(source_levels$h[[hh]] %in% sg)
+          s_gp = s_gp[!(s_gp %in% sg)]
           qq = qq + 1
         }
         nsource_groups[hh] = length(p_cal$h[[hh]]$Source_Groups)
