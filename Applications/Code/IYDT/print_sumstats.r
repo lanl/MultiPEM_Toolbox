@@ -444,44 +444,41 @@ print_ss = function(xfin, pc, ci=NULL, levels=NULL)
         }
       }
     }
-    if( pc$pvc_2 > 0 ){
-      iFirst = TRUE
-      for( hh in 1:pc$H ){
-        if( any(pc$h[[hh]]$pvc_1 > 0 & pc$h[[hh]]$pvc_2 > 0) ){
-          if( iFirst ){
-            print("LEVEL 2 VARIANCE COMPONENTS")
+  }
+  if( pc$pvc_2 > 0 ){
+    iFirst = TRUE
+    for( hh in 1:pc$H ){
+      if( any(pc$h[[hh]]$pvc_2 > 0) ){
+        if( iFirst ){
+          print("LEVEL 2 VARIANCE COMPONENTS")
+          cat("\n")
+          iFirst = FALSE
+        }
+        for( rr in 1:pc$h[[hh]]$Rh ){
+          if( pc$h[[hh]]$pvc_2[rr] > 0 ){
+            cat("\t")
+            print(paste("Phenomenology: ",hh,"; Response: ",rr,sep=""))
             cat("\n")
-            iFirst = FALSE
-          }
-          for( rr in 1:pc$h[[hh]]$Rh ){
-            if( pc$h[[hh]]$pvc_1[rr] > 0 ){
-              if( pc$h[[hh]]$pvc_2[rr] > 0 ){
+            if( !is.null(levels) ){
+              cat("\t")
+              print(paste("POSTERIOR MEAN: ",round(apply(as.matrix(
+                    exp(sfin[,1:pc$h[[hh]]$pvc_2[rr]])),2,mean),4),
+                    sep=""))
+              cat("\n")
+              qfin = apply(as.matrix(exp(sfin[,1:pc$h[[hh]]$pvc_2[rr]])),
+                           2,quantile,probs=levels)
+              for( qq in 1:nlevels ){
                 cat("\t")
-                print(paste("Phenomenology: ",hh,"; Response: ",rr,
-                      sep=""))
+                print(paste("LEVEL ",100*levels[qq],"%: ",
+                            round(qfin[qq,],4),sep=""))
                 cat("\n")
-                if( !is.null(levels) ){
-                  cat("\t")
-                  print(paste("POSTERIOR MEAN: ",round(apply(as.matrix(
-                        exp(sfin[,1:pc$h[[hh]]$pvc_2[rr]])),2,mean),4),
-                        sep=""))
-                  cat("\n")
-                  qfin = apply(as.matrix(exp(sfin[,1:pc$h[[hh]]$pvc_2[rr]])),
-                               2,quantile,probs=levels)
-                  for( qq in 1:nlevels ){
-                    cat("\t")
-                    print(paste("LEVEL ",100*levels[qq],"%: ",
-                                round(qfin[qq,],4),sep=""))
-                    cat("\n")
-                  }
-                  sfin = as.matrix(sfin[,-(1:pc$h[[hh]]$pvc_2[rr])])
-                } else {
-                  cat("\t")
-                  print(round(exp(xfin[1:pc$h[[hh]]$pvc_2[rr]]),4))
-                  xfin = xfin[-(1:pc$h[[hh]]$pvc_2[rr])]
-                  cat("\n")
-                }
               }
+              sfin = as.matrix(sfin[,-(1:pc$h[[hh]]$pvc_2[rr])])
+            } else {
+              cat("\t")
+              print(round(exp(xfin[1:pc$h[[hh]]$pvc_2[rr]]),4))
+              xfin = xfin[-(1:pc$h[[hh]]$pvc_2[rr])]
+              cat("\n")
             }
           }
         }
@@ -602,31 +599,38 @@ print_ss = function(xfin, pc, ci=NULL, levels=NULL)
     # print scale parameters for variance component priors
     print("VARIANCE COMPONENT PRIOR SCALE PARAMETERS")
     cat("\n")
+    ipvc_1 = FALSE; ipvc_2 = FALSE;
+    if( pc$pvc_1 > 0 ){ ipvc_1 = TRUE }
+    if( pc$pvc_2 > 0 ){ ipvc_2 = TRUE }
     for( hh in 1:pc$H ){
-      for( rr in 1:pc$h[[hh]]$Rh ){
-        if( pc$h[[hh]]$pvc_1[rr] > 0 ){
-          cat("\t")
-          print(paste("Phenomenology: ",hh,"; Response: ",rr,
-                sep=""))
-          cat("\n")
-          if( !is.null(levels) ){
+      if( (ipvc_1 && any(pc$h[[hh]]$pvc_1 > 0)) ||
+          (ipvc_2 && any(pc$h[[hh]]$pvc_2 > 0)) ){
+        for( rr in 1:pc$h[[hh]]$Rh ){
+          if( (ipvc_1 && pc$h[[hh]]$pvc_1[rr] > 0) ||
+              (ipvc_2 && pc$h[[hh]]$pvc_2[rr] > 0) ){
             cat("\t")
-            print(paste("POSTERIOR MEAN: ",round(mean(exp(sfin[,1])),2),
-                        sep=""))
+            print(paste("Phenomenology: ",hh,"; Response: ",rr,
+                  sep=""))
             cat("\n")
-            qfin = quantile(exp(sfin[,1]),probs=levels)
-            for( qq in 1:nlevels ){
+            if( !is.null(levels) ){
               cat("\t")
-              print(paste("LEVEL ",100*levels[qq],"%: ",
-                    round(qfin[qq],2),sep=""))
+              print(paste("POSTERIOR MEAN: ",
+                          round(mean(exp(sfin[,1])),2),sep=""))
+              cat("\n")
+              qfin = quantile(exp(sfin[,1]),probs=levels)
+              for( qq in 1:nlevels ){
+                cat("\t")
+                print(paste("LEVEL ",100*levels[qq],"%: ",
+                      round(qfin[qq],2),sep=""))
+                cat("\n")
+              }
+              sfin = as.matrix(sfin[,-1])
+            } else {
+              cat("\t")
+              print(round(exp(xfin[1]),2))
+              xfin = xfin[-1]
               cat("\n")
             }
-            sfin = as.matrix(sfin[,-1])
-          } else {
-            cat("\t")
-            print(round(exp(xfin[1]),2))
-            xfin = xfin[-1]
-            cat("\n")
           }
         }
       }
