@@ -1,0 +1,55 @@
+A symbolic link to IYDT phenomenology-specific code needed for
+these analyses should be placed in this directory as follows:
+
+% ln -s ../../../Applications/Code/IYDT-gsrp/Phenomenology/ Code
+
+Joint analysis with 2 phenomenologies:
+  optical, crater
+
+Sub-analysis Directories:
+
+I-EIV-SUGAR-hob-0-mc-0.3-ram - two-stage rapid assessment of
+                               W/HOB inference for "new event"
+                               SUGAR, with errors-in-variables
+                               yields for benchmark data
+I-SUGAR-hob-0-mc-ram - two-stage rapid assessment of W/HOB
+                       inference for "new event" SUGAR, with
+                       fixed yields for benchmark data
+
+*** MULTI-STAGE RAPID ASSESSMENT ***
+
+For rapid assessments in which the calibration inference
+is intended for use in multiple new event inferences:
+1) Go to the directory containing the baseline case:
+
+% cd I-EIV-SUGAR-hob-0-mc-0.3-ram
+
+2) Run the runMPEM.r file to calibrate the model parameters
+
+3) Copy the .RData file into the additional case directories
+   upon completion of this run, for example:
+
+% cp .RData ../<additional case directory>/.
+
+4) For each case, run the runMPEM_0.r file to characterize the
+   new event parameters
+
+If only one rapid assessment is to be conducted, first run the
+runMPEM.r file and once the job completes, run the runMPEM_0.r
+file.
+
+If a more informed starting value for MultiPEM log-likelihood
+optimization is desired:
+1) Create an "Opt" directory
+2) Copy MLE results from each optimal single-phenomenology
+   analysis into this "Opt" directory
+3) Continue with step 1) above
+
+        cp ../Optical/I-EIV-SUGAR-hob-0-mc-0.3-ram/opt.RData Opt/opt_1_eiv_0.RData
+                                                                optical
+        cp ../Optical/I-SUGAR-hob-0-mc-ram/opt.RData Opt/opt_1_0.RData
+                                                                optical
+        cp ../Crater/I-EIV-SUGAR-0-mc-0.3-ram/opt.RData Opt/opt_2_eiv_0.RData 
+                                                                crater
+        cp ../Crater/I-SUGAR-0-mc-ram/opt.RData Opt/opt_2_0.RData
+                                                                crater

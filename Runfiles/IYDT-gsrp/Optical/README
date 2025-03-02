@@ -1,0 +1,36 @@
+A symbolic link to IYDT phenomenology-specific code needed for
+these analyses should be placed in this directory as follows:
+
+% ln -s ../../../Applications/Code/IYDT-gsrp/Phenomenology/ Code
+
+Sub-analysis Directories:
+
+I-EIV-SUGAR-hob-0-mc-0.3-ram - two-stage rapid assessment of
+                               W/HOB inference for "new event"
+                               SUGAR, with errors-in-variables
+                               yields for benchmark data
+I-SUGAR-hob-0-mc-ram - two-stage rapid assessment of W/HOB
+                       inference for "new event" SUGAR, with
+                       fixed yields for benchmark data
+
+*** MULTI-STAGE RAPID ASSESSMENT ***
+
+For rapid assessments in which the calibration inference
+is intended for use in multiple new event inferences:
+1) Go to the directory containing the baseline case:
+
+% cd I-SUGAR-hob-0-mc-ram
+
+2) Run the runMPEM.r file to calibrate the model parameters
+
+3) Copy the .RData file into the additional case directories
+   upon completion of this run, for example:
+
+% cp .RData ../<additional case directory>/.
+
+4) For each case, run the runMPEM_0.r file to characterize the
+   new event parameters
+
+If only one rapid assessment is to be conducted, first run the
+runMPEM.r file and once the job completes, run the runMPEM_0.r
+file.
