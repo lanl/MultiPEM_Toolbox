@@ -21,7 +21,7 @@
 
 # Plot of CIs based on MLE
 pdf("ci_plot_mle.pdf",height=4,width=8)
-plot(0,0,xlim=c(0.5,5.5),ylim=c(0,15),
+plot(0,0,xlim=c(0.5,5.5),ylim=c(0,17.75),
      xlab="Phenomenology",ylab="Yield (kt)",
      type="n",axes=F,frame.plot=TRUE)
 axis(1,at=c(1,1.5,2,3,3.5,4,5),
@@ -59,7 +59,7 @@ graphics.off()
 
 # Plot of CIs based on MLE
 pdf("ci_plot_mle_v.pdf",height=8,width=4)
-plot(0,0,xlim=c(0,17),ylim=c(0.5,5.5),
+plot(0,0,xlim=c(0,17.75),ylim=c(0.5,5.5),
      xlab="Yield (kt)",ylab="Phenomenology",
      type="n",axes=F,frame.plot=TRUE)
 axis(1)
@@ -97,7 +97,7 @@ graphics.off()
 
 # Plot of CIs based on posterior samples
 pdf("ci_plot_bayes.pdf",height=4,width=8)
-plot(0,0,xlim=c(0.5,5.5),ylim=c(0,17),
+plot(0,0,xlim=c(0.5,5.5),ylim=c(0,17.75),
      xlab="Phenomenology",ylab="Yield (kt)",
      type="n",axes=F,frame.plot=TRUE)
 axis(1,at=c(1,1.5,2,3,3.5,4,5),
@@ -116,12 +116,12 @@ segments(1.9,1.70,2.1,1.70,lwd=4,col="gray50")
 segments(3,0.27,3,4.63,lwd=4,col="violet")
 segments(2.9,0.27,3.1,0.27,lwd=4,col="violet")
 segments(2.9,4.63,3.1,4.63,lwd=4,col="violet")
-segments(3.5,0.15,3.5,16.74,lwd=4,col="green")
+segments(3.5,0.15,3.5,17.46,lwd=4,col="green")
 segments(3.4,0.15,3.6,0.15,lwd=4,col="green")
-segments(3.4,16.74,3.6,16.74,lwd=4,col="green")
-segments(4,0.42,4,3.89,lwd=4,col="gray50")
-segments(3.9,0.42,4.1,0.42,lwd=4,col="gray50")
-segments(3.9,3.89,4.1,3.89,lwd=4,col="gray50")
+segments(3.4,17.46,3.6,17.46,lwd=4,col="green")
+segments(4,0.41,4,3.69,lwd=4,col="gray50")
+segments(3.9,0.41,4.1,0.41,lwd=4,col="gray50")
+segments(3.9,3.69,4.1,3.69,lwd=4,col="gray50")
 segments(5,0.45,5,1.79,lwd=4,col="black")
 segments(4.9,0.45,5.1,0.45,lwd=4,col="black")
 segments(4.9,1.79,5.1,1.79,lwd=4,col="black")
