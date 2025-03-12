@@ -445,7 +445,15 @@ predict = function(x, pc)
           snames[[rr]] = c(snames[[rr]],
                            rep(pc$h[[hh]]$Source[[gg]][[rr]],
                                each=nrow(Sigma_hr1[[rr]])))
-          ic = pc$h[[hh]]$Omega_ic[[gg]][[rr]]
+          if( "Omega_ic" %in% pnames ){
+            ic = pc$h[[hh]]$Omega_ic[[gg]][[rr]]
+          } else {
+            st_ng = 0
+            if( rr > 1 ){
+              st_ng = st_ng + sum(pc$h[[hh]]$ng[[gg]][1:(rr-1)])
+            }
+            ic = st_ng + (1:pc$h[[hh]]$ng[[gg]][rr])
+          }
           tseffects = seffects[ic]
           kk = 0
           for( ii in pc$h[[hh]]$Source_Groups[[gg]] ){
