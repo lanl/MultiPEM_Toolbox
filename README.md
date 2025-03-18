@@ -22,23 +22,23 @@ quantified uncertainty reduction as the desired benefit.
 
 Consult the technical report provided with this repository for a
 description of the statistical methodology and example application
-implemented in this repository:
+(see ./Runfiles/IYDT) implemented in this repository:
 
 ./multipem-la-ur-23-21950.pdf
 
-Consult the presentation prepared for the AFTAC Geophysical Sciences
-Review Panel for extensions of "nested" (within source) path effects
-modeling to "crossed" (across source) path effects modeling (see
-./Runfiles/IYDT-gsrp):
-
-./MultiPEM-GSRP-030425.pdf
-
 Consult the user manual provided with this repository for descriptions
-of the input decks provided with the example application (see
-./Runfiles/IYDT) and instructions on how to run single-phenomenology
-and MultiPEM analyses:
+of the input decks provided with the example application of this
+technical report (see ./Runfiles/IYDT), and more generally instructions
+on how to run single-phenomenology and MultiPEM analyses:
 
 ./multipem-um-la-ur-23-30117.pdf
+
+Consult the presentation prepared for the AFTAC Geophysical Sciences
+Review Panel for extensions of "nested" (within source) path effects
+modeling to "crossed" (across source) path effects modeling also
+implemented in this repository (see ./Runfiles/IYDT-gsrp):
+
+./MultiPEM-GSRP-030425.pdf
 
 Directories in this repository:
 
