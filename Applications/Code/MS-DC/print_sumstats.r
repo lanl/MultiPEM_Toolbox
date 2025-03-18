@@ -301,6 +301,7 @@ print_ss = function(xfin, pc, ci=NULL, levels=NULL)
     print("COMMON COEFFICIENTS")
     cat("\n")
     for( hh in 1:pc$H ){
+      pnamesh = names(pc$h[[hh]])
       pbeta = sum(pc$h[[hh]]$pbeta)
       if( pbeta > 0 ){
         if( !is.null(levels) ){
@@ -316,11 +317,17 @@ print_ss = function(xfin, pc, ci=NULL, levels=NULL)
             cat("\n")
             if( !is.null(levels) ){
               cat("\t")
+              qbetar = qbeta[,1:pc$h[[hh]]$pbeta[rr]]
+              if( "Phen" %in% pnamesh &&
+                  pc$h[[hh]]$Phen == "Optical" ){
+                qbetar[,3] = notExp(qbetar[,3])
+                qbetar[,4] = notExp(qbetar[,4])
+              }
               print(paste("POSTERIOR MEAN: ",round(apply(as.matrix(
-                    qbeta[,1:pc$h[[hh]]$pbeta[rr]]),2,mean),2),sep=""))
+                    qbetar),2,mean),2),sep=""))
               cat("\n")
-              qfin = apply(as.matrix(qbeta[,1:pc$h[[hh]]$pbeta[rr]]),2,
-                           quantile,probs=levels)
+              qfin = apply(as.matrix(qbetar),
+                           2,quantile,probs=levels)
               for( qq in 1:nlevels ){
                 cat("\t")
                 print(paste("LEVEL ",100*levels[qq],"%: ",
@@ -330,7 +337,13 @@ print_ss = function(xfin, pc, ci=NULL, levels=NULL)
               qbeta = as.matrix(qbeta[,-(1:pc$h[[hh]]$pbeta[rr])])
             } else {
               cat("\t")
-              print(round(beta[1:pc$h[[hh]]$pbeta[rr]],2))
+              betar = beta[1:pc$h[[hh]]$pbeta[rr]]
+              if( "Phen" %in% pnamesh &&
+                  pc$h[[hh]]$Phen == "Optical" ){
+                betar[3] = notExp(betar[3])
+                betar[4] = notExp(betar[4])
+              }
+              print(round(betar,2))
               beta = beta[-(1:pc$h[[hh]]$pbeta[rr])]
               cat("\n")
             }
