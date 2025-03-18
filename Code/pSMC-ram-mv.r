@@ -74,7 +74,11 @@ Gibbs = function(x, D, p_par, l_par, nu_t, gamma, alphat) {
   Z = Z / norm(as.matrix(U), type="2")
   lp = log_P(newx, p_par)
   ll = log_L(newx, l_par)
-  ratio = lp - x[D+1] + nu_t * (ll - x[D+2])
+  if( is.infinite(ll) ){
+    if( nu_t == 0 ){ ll_t = 0
+    } else { ll_t = -Inf }
+  } else { ll_t = nu_t * (ll - x[D+2]) }
+  ratio = lp - x[D+1] + ll_t
   alpha = min(1, exp(ratio))
   a = 0
   u = runif(1)
