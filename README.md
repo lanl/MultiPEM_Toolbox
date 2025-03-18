@@ -1,4 +1,3 @@
-# MultiPEM_Toolbox
 Multi-Phenomenology Explosion Monitoring (MultiPEM) Toolbox
 
 The MultiPEM approach involves the statistical modeling of observed
@@ -27,41 +26,47 @@ implemented in this repository:
 
 ./multipem-la-ur-23-21950.pdf
 
+Consult the presentation prepared for the AFTAC Geophysical Sciences
+Review Panel for extensions of "nested" (within source) path effects
+modeling to "crossed" (across source) path effects modeling (see
+./Runfiles/IYDT-gsrp):
+
+./MultiPEM-GSRP-030425.pdf
+
 Consult the user manual provided with this repository for descriptions
-of the input decks provided with the example application and
-instructions on how to run single-phenomenology and MultiPEM analyses:
+of the input decks provided with the example application (see
+./Runfiles/IYDT) and instructions on how to run single-phenomenology
+and MultiPEM analyses:
 
 ./multipem-um-la-ur-23-30117.pdf
 
 Directories in this repository:
 
 Applications/
-
-  Contains application-specific code, data, and verification tests
+	Contains application-specific code, data, and
+	verification tests
 
 Code/
-
-  Contains functions utilized across applications, such as the
-  log-likelihood, log-prior, and log-posterior distributions and
-  their associated gradients
+	Contains functions utilized across applications,
+	such as the log-likelihood, log-prior, and log-
+	posterior distributions and their associated
+	gradients
 
 Runfiles/
-
-  Set up application directories to run MultiPEM analyses using R
+	Set up application directories to run
+	MultiPEM analyses using R
 
 Runfiles-Docker/
-
-  Set up application directories to run MultiPEM analyses using R
-  from Docker
+	Set up application directories to run
+	MultiPEM analyses using R from Docker
 
 Test/
-
-  Contains code for running general verification tests using R
+	Contains code for running general verification
+	tests using R
 
 Test-Docker/
-
-  Contains code for running general verification tests using R
-  from Docker
+	Contains code for running general verification
+	tests using R from Docker
 
 These directories, and associated sub-directories, contain additional
 README files with information and instructions for running the code.
