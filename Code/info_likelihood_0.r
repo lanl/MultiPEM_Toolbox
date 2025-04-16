@@ -668,28 +668,34 @@ info_ll_0 = function(opt, pc)
 
         # compute components of information matrices needed for
         # errors-in-variables correction
-        sc = 0
+        sc_r = 0
         for( ii in i_source_g ){
-          sc = sc + 1
+          sc_r = sc_r + 1
           if( "eiv" %in% pnames && !is.null(pc$h[[hh]]$eiv[[ii]]) ){
-            I_wc[pc$h[[hh]]$eiv[[ii]],pc$h[[hh]]$eiv[[ii]]] =
-              I_wc[pc$h[[hh]]$eiv[[ii]],pc$h[[hh]]$eiv[[ii]]] +
-              t(g_w[[sc]]) %*% IOmega %*% g_w[[sc]]
+            sc_c = 0
+            for( jj in i_source_g ){
+              sc_c = sc_c + 1
+              if( "eiv" %in% pnames && !is.null(pc$h[[hh]]$eiv[[jj]]) ){
+                I_wc[pc$h[[hh]]$eiv[[ii]],pc$h[[hh]]$eiv[[jj]]] =
+                I_wc[pc$h[[hh]]$eiv[[ii]],pc$h[[hh]]$eiv[[jj]]] +
+                t(g_w[[sc_r]]) %*% IOmega %*% g_w[[sc_c]]
+              }
+            }
             if( pbeta > 0 ){
               I_0w[[hh]][,pc$h[[hh]]$eiv[[ii]]] =
-                t(Jac_0) %*% IOmega %*% g_w[[sc]]
+                t(Jac_0) %*% IOmega %*% g_w[[sc_r]]
               if( ptbeta > 0 && !is.null(I_tw[[hh]][[tt]]) ){
                 I_tw[[hh]][[tt]][,pc$h[[hh]]$eiv[[ii]]] =
-                  t(Jac_t) %*% IOmega %*% g_w[[sc]]
+                  t(Jac_t) %*% IOmega %*% g_w[[sc_r]]
               }
             } else if( ptbeta > 0 && !is.null(I_tw[[hh]][[tt]]) ){
               I_tw[[hh]][[tt]][,pc$h[[hh]]$eiv[[ii]]] =
-                t(Jac_t) %*% IOmega %*% g_w[[sc]]
+                t(Jac_t) %*% IOmega %*% g_w[[sc_r]]
             }
             if( pm$cal ){
               I_pw[csub,pc$h[[hh]]$eiv[[ii]]] =
                 I_pw[csub,pc$h[[hh]]$eiv[[ii]]] +
-                t(Jac_c) %*% IOmega %*% g_w[[sc]]
+                t(Jac_c) %*% IOmega %*% g_w[[sc_r]]
             }
           }
         }
