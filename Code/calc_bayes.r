@@ -302,7 +302,7 @@ calc_bayes = function(p_cal,gdir,adir,nst=10,nburn=10000,nmcmc=20000,
   cmax = -Inf
   ptm = proc.time()
   fCatch = foreach( qq = 1:nst ) %dofuture% {
-             lpo_opt(Xst[qq,],bfgs,p_cal)
+             lpo_opt(Xst[qq,],bfgs,p_cal,t_cal)
            } %seed% TRUE
   plan(sequential)
   print("Run time:")
