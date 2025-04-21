@@ -423,7 +423,7 @@ print_ss = function(xfin, pc, ci=NULL, levels=NULL)
 
   # print variance components by response
   if( pc$pvc_1 > 0 ){
-    print("LEVEL 1 VARIANCE COMPONENTS")
+    print("SOURCE VARIANCE COMPONENTS")
     cat("\n")
     for( hh in 1:pc$H ){
       if( any(pc$h[[hh]]$pvc_1 > 0) ){
@@ -459,7 +459,7 @@ print_ss = function(xfin, pc, ci=NULL, levels=NULL)
     }
   }
   if( pc$pvc_2 > 0 ){
-    print("LEVEL 2 VARIANCE COMPONENTS")
+    print("PATH VARIANCE COMPONENTS")
     cat("\n")
     for( hh in 1:pc$H ){
       if( any(pc$h[[hh]]$pvc_2 > 0) ){

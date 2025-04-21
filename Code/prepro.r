@@ -516,7 +516,7 @@ prepro = function(gdir,adir,rdir,cdir,Rh,pbeta,bopt=FALSE,nev=FALSE,
         if( all(p_cal$h[[hh]]$nplev[1:nsource_groups[hh],rr] <= 1) ){
                                       print(paste(
                                       "Warning: Insufficient Paths for",
-                                      " Level 2 Variance Component",
+                                      " Path Variance Component",
                                       " models with Phenomenology ",hh,
                                       " and Response ",rr,".",sep=""))
         } else {
@@ -531,7 +531,7 @@ prepro = function(gdir,adir,rdir,cdir,Rh,pbeta,bopt=FALSE,nev=FALSE,
             }
             if( all(npobs <= 1) ){
               print(paste("Warning: Insufficient number of ",
-                          "observations per Path for Level 2 ",
+                          "observations per path for Path ",
                           "Variance Component models with ",
                           "Phenomenology ",hh,"and Response ",
                           rr,".",sep=""))
@@ -633,7 +633,7 @@ prepro = function(gdir,adir,rdir,cdir,Rh,pbeta,bopt=FALSE,nev=FALSE,
     }
   }
 
-  # Level 1 variance component parameter count
+  # Source variance component parameter count
   p_cal$pvc_1 = 0
   if( !is.null(pvc_1) ){
     for( hh in 1:H ){ p_cal$h[[hh]]$pvc_1 = pvc_1[[hh]] }
@@ -642,7 +642,7 @@ prepro = function(gdir,adir,rdir,cdir,Rh,pbeta,bopt=FALSE,nev=FALSE,
     }
   }
 
-  # Level 2 variance component parameter count
+  # Path variance component parameter count
   p_cal$pvc_2 = 0
   if( !is.null(pvc_2) ){
     for( hh in 1:H ){ p_cal$h[[hh]]$pvc_2 = pvc_2[[hh]] }
