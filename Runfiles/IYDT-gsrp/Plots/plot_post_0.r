@@ -19,22 +19,22 @@
 ########################################################################
 
 samp_s = as.matrix(read.table(
-         "../Seismic/I-SUGAR-hob-0-mc-ram/postsamp_seismic_0.txt"))
+         "../Seismic/I-SUGAR-hob-0/postsamp_seismic_0.txt"))
 samp_a = as.matrix(read.table(
-       "../Acoustic/I-SUGAR-hob-0-mc-ram/postsamp_acoustic_0.txt"))
+       "../Acoustic/I-SUGAR-hob-0/postsamp_acoustic_0.txt"))
 samp_o = as.matrix(read.table(
-         "../Optical/I-SUGAR-hob-0-mc-ram/postsamp_optical_0.txt"))
+         "../Optical/I-SUGAR-hob-0/postsamp_optical_0.txt"))
 samp_o_eiv = as.matrix(read.table(
-             paste("../Optical/I-EIV-SUGAR-hob-0-mc-0.3-ram/",
+             paste("../Optical/I-EIV-SUGAR-hob-0/",
                    "postsamp_optical_eiv_0.txt",sep="")))
 samp_c = as.matrix(read.table(
-               "../Crater/I-SUGAR-0-mc-ram/postsamp_crater_0.txt"))
+               "../Crater/I-SUGAR-0/postsamp_crater_0.txt"))
 samp_c_eiv = as.matrix(read.table(
-   "../Crater/I-EIV-SUGAR-0-mc-0.3-ram/postsamp_crater_eiv_0.txt"))
+   "../Crater/I-EIV-SUGAR-0/postsamp_crater_eiv_0.txt"))
 samp_4 = as.matrix(read.table(
-            "../4-Phen/I-SUGAR-hob-0-mc-ram/postsamp_4phen_0.txt"))
+            "../4-Phen/I-SUGAR-hob-0/postsamp_4phen_0.txt"))
 samp_4_eiv = as.matrix(read.table(
-"../4-Phen/I-EIV-SUGAR-hob-0-mc-0.3-ram/postsamp_4phen_eiv_0.txt"))
+"../4-Phen/I-EIV-SUGAR-hob-0/postsamp_4phen_eiv_0.txt"))
 
 w_lb = min(samp_s[,1],samp_a[,1],samp_o[,1],samp_c,samp_4[,1])
 w_ub = max(samp_s[,1],samp_a[,1],samp_o[,1],samp_c,samp_4[,1])

@@ -1,0 +1,119 @@
+Joint analysis with 4 phenomenologies:
+  seismic, acoustic, optical, crater
+
+Sub-analysis Directories:
+
+I-EIV-SUGAR-hob-0 - two-stage rapid assessment of
+                    W/HOB inference for "new event"
+                    SUGAR, with errors-in-variables
+                    yields for benchmark data
+I-SUGAR-hob-0     - two-stage rapid assessment of W/HOB
+                    inference for "new event" SUGAR, with
+                    fixed yields for benchmark data
+I-EIV-SUGAR-hob   - complete assessment of W/HOB inference
+                    for "new event" SUGAR, with
+                    errors-in-variables yields for
+                    benchmark data
+I-SUGAR-hob       - complete assessment of W/HOB inference
+                    for "new event" SUGAR, with fixed
+                    yields for benchmark data
+
+If a more informed starting value for MultiPEM
+log-likelihood optimization is desired:
+1) Create an "Opt" directory
+2) Copy MLE results from each optimal single-
+   phenomenology analysis into this "Opt"
+   directory:
+	cp ../Seismic/I-SUGAR-hob/opt.RData Opt/opt_1.RData
+							seismic
+	cp ../Acoustic/I-SUGAR-hob/opt.RData Opt/opt_2.RData
+							acoustic
+	cp ../Optical/I-EIV-SUGAR-hob/opt.RData Opt/opt_3_eiv.RData
+	cp ../Optical/I-SUGAR-hob/opt.RData Opt/opt_3.RData
+							optical
+	cp ../Crater/I-EIV-SUGAR/opt.RData Opt/opt_4_eiv.RData
+	cp ../Crater/I-SUGAR/opt.RData Opt/opt_4.RData
+							crater
+
+Running Sub-analyses:
+
+1) Assume the "MultiPEM_Toolbox" directory is placed
+   in the user's home directory.
+
+2) Create Dockerfile in each sub-analysis directory.
+
+3) Build an image for each sub-analysis and run the image
+   by starting a container. For example, to run the
+   sub-analysis in the I-EIV-SUGAR-hob directory, execute the
+   following commands:
+
+% cd I-EIV-SUGAR-hob
+% docker build -t 4-phen/i-eiv-sugar-hob .
+% docker run -it --rm -v \
+  ~/MultiPEM_Toolbox/Runfiles-Docker/IYDT-gsrp/4-Phen/I-EIV-SUGAR-hob:\
+  /I-EIV-SUGAR-hob -d 4-phen/i-eiv-sugar-hob
+
+4) Once the sub-analysis completes, the image may be
+   deleted by executing the command:
+
+% docker image rm 4-phen/i-eiv-sugar-hob
+
+*** MULTI-STAGE RAPID ASSESSMENT ***
+
+For rapid assessments in which the calibration inference
+is intended for use in multiple new event inferences,
+replace steps 3) and 4) above as follows:
+
+3) Build an image for the calibration inference (stage 1)
+   and run the image by starting a container. For example,
+   to run the calibration inference in the I-EIV-SUGAR-hob-0
+   directory, execute the following commands:
+
+% cd I-EIV-SUGAR-hob-0
+% docker build -f Dockerfile_cal -t 4-phen/i-eiv-sugar-cal .
+% docker run -it --rm -v 4phen_eiv_cal:/4phen_eiv_cal -v \
+  ~/MultiPEM_Toolbox/Runfiles-Docker/IYDT-gsrp/4-Phen/I-EIV-SUGAR-hob-0:\
+  /I-EIV-SUGAR-hob-0 -d 4-phen/i-eiv-sugar-cal
+
+  The docker run command creates the volume 4phen_eiv_cal,
+  which is used to persist the .RData file resulting from
+  the stage 1 calibration inference so that it can be
+  used in other analyses (obviating the need to run the
+  same calibration inference multiple times).
+
+  Upon completion of the stage 1 run, build an image for the
+  new event inference (stage 2) and run the image by starting
+  a container. For example, to run the new event inference in
+  the I-EIV-SUGAR-hob-0 directory, execute the following commands:
+
+% cd I-EIV-SUGAR-hob-0
+% docker build -f Dockerfile_0 -t 4-phen/i-eiv-sugar-hob-0 .
+% docker run -it --rm -v 4phen_eiv_cal:/4phen_eiv_cal:ro -v \
+  ~/MultiPEM_Toolbox/Runfiles-Docker/IYDT-gsrp/4-Phen/I-EIV-SUGAR-hob-0:\
+  /I-EIV-SUGAR-hob-0 -d 4-phen/i-eiv-sugar-hob-0
+
+  Note that this docker run command binds to the 4phen_eiv_cal
+  volume, in order to access the .RData file from the stage
+  1 calibration inference as desired.
+
+4) Once all analyses are complete, the volume and images
+   may be deleted by executing the commands:
+
+% docker volume rm 4phen_eiv_cal
+% docker image rm 4-phen/i-eiv-sugar-cal 4-phen/i-eiv-sugar-hob-0
+
+If a more informed starting value for MultiPEM log-likelihood
+optimization is desired:
+1) Create an "Opt" directory
+2) Copy MLE results from each optimal single-phenomenology
+   analysis into this "Opt" directory:
+	cp ../Seismic/I-SUGAR-hob-0/opt.RData Opt/opt_1_0.RData
+								seismic
+	cp ../Acoustic/I-SUGAR-hob-0/opt.RData Opt/opt_2_0.RData
+								acoustic
+	cp ../Optical/I-EIV-SUGAR-hob-0/opt.RData Opt/opt_3_eiv_0.RData
+	cp ../Optical/I-SUGAR-hob-0/opt.RData Opt/opt_3_0.RData
+								optical
+	cp ../Crater/I-EIV-SUGAR-0/opt.RData Opt/opt_4_eiv_0.RData
+	cp ../Crater/I-SUGAR-0/opt.RData Opt/opt_4_0.RData
+								crater

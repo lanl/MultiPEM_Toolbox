@@ -3,10 +3,12 @@ these analyses should be placed in this directory as follows:
 
 % ln -s ../../../Applications/Code/IYDT-gsrp/Phenomenology/ Code
 
-Sub-analysis Directory:
+Sub-analysis Directories:
 
-I-SUGAR-hob-0-mc-ram - two-stage rapid assessment of W/HOB
-                       inference for "new event" SUGAR
+I-SUGAR-hob-0 - two-stage rapid assessment of W/HOB
+                inference for "new event" SUGAR
+I-SUGAR-hob   - complete assessment of W/HOB inference
+                for "new event" SUGAR
 
 *** MULTI-STAGE RAPID ASSESSMENT ***
 
@@ -14,7 +16,7 @@ For rapid assessments in which the calibration inference
 is intended for use in multiple new event inferences:
 1) Go to the directory containing the baseline case:
 
-% cd I-SUGAR-hob-0-mc-ram
+% cd I-SUGAR-hob-0
 
 2) Run the runMPEM.r file to calibrate the model parameters
 

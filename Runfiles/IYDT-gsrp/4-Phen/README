@@ -8,13 +8,21 @@ Joint analysis with 4 phenomenologies:
 
 Sub-analysis Directories:
 
-I-EIV-SUGAR-hob-0-mc-0.3-ram - two-stage rapid assessment of
-                               W/HOB inference for "new event"
-                               SUGAR, with errors-in-variables
-                               yields for benchmark data
-I-SUGAR-hob-0-mc-ram - two-stage rapid assessment of W/HOB
-                       inference for "new event" SUGAR, with
-                       fixed yields for benchmark data
+I-EIV-SUGAR-hob-0 - two-stage rapid assessment of
+                    W/HOB inference for "new event"
+                    SUGAR, with errors-in-variables
+                    yields for benchmark data
+I-SUGAR-hob-0     - two-stage rapid assessment of W/HOB
+                    inference for "new event" SUGAR, with
+                    fixed yields for benchmark data
+I-EIV-SUGAR-hob   - complete assessment of W/HOB inference
+                    for "new event" SUGAR, with
+                    errors-in-variables yields for
+                    benchmark data
+I-SUGAR-hob       - complete assessment of W/HOB inference
+                    for "new event" SUGAR, with fixed
+                    yields for benchmark data
+         
 
 *** MULTI-STAGE RAPID ASSESSMENT ***
 
@@ -22,7 +30,7 @@ For rapid assessments in which the calibration inference
 is intended for use in multiple new event inferences:
 1) Go to the directory containing the baseline case:
 
-% cd I-EIV-SUGAR-hob-0-mc-0.3-ram
+% cd I-EIV-SUGAR-hob-0
 
 2) Run the runMPEM.r file to calibrate the model parameters
 
@@ -45,15 +53,15 @@ optimization is desired:
    analysis into this "Opt" directory
 3) Continue with step 1) above
 
-        cp ../Seismic/I-SUGAR-hob-0-mc-ram/opt.RData Opt/opt_1_0.RData
+        cp ../Seismic/I-SUGAR-hob-0/opt.RData Opt/opt_1_0.RData
                                                                 seismic
-        cp ../Acoustic/I-SUGAR-hob-0-mc-ram/opt.RData Opt/opt_2_0.RData       
+        cp ../Acoustic/I-SUGAR-hob-0/opt.RData Opt/opt_2_0.RData       
                                                                 acoustic
-        cp ../Optical/I-EIV-SUGAR-hob-0-mc-0.3-ram/opt.RData Opt/opt_3_eiv_0.RData
+        cp ../Optical/I-EIV-SUGAR-hob-0/opt.RData Opt/opt_3_eiv_0.RData
                                                                 optical
-        cp ../Optical/I-SUGAR-hob-0-mc-ram/opt.RData Opt/opt_3_0.RData
+        cp ../Optical/I-SUGAR-hob-0/opt.RData Opt/opt_3_0.RData
                                                                 optical
-        cp ../Crater/I-EIV-SUGAR-0-mc-0.3-ram/opt.RData Opt/opt_4_eiv_0.RData 
+        cp ../Crater/I-EIV-SUGAR-0/opt.RData Opt/opt_4_eiv_0.RData 
                                                                 crater
-        cp ../Crater/I-SUGAR-0-mc-ram/opt.RData Opt/opt_4_0.RData
+        cp ../Crater/I-SUGAR-0/opt.RData Opt/opt_4_0.RData
                                                                 crater

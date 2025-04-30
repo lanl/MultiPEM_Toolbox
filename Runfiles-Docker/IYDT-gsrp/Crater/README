@@ -1,0 +1,83 @@
+Sub-analysis Directories:
+
+I-EIV-SUGAR-0 - two-stage rapid assessment of
+                W inference for "new event"
+                SUGAR, with errors-in-variables
+                yields for benchmark data
+I-SUGAR-0     - two-stage rapid assessment of W
+                inference for "new event" SUGAR, with
+                fixed yields for benchmark data
+I-EIV-SUGAR   - complete assessment of W inference for
+                "new event" SUGAR, with
+                errors-in-variables yields for
+                benchmark data
+I-SUGAR       - complete assessment of W inference for
+                "new event" SUGAR, with fixed yields
+                for benchmark data
+
+Running Sub-analyses:
+
+1) Assume the "MultiPEM_Toolbox" directory is placed
+   in the user's home directory.
+
+2) Create Dockerfile in each sub-analysis directory.
+
+3) Build an image for each sub-analysis and run the image
+   by starting a container. For example, to run the
+   sub-analysis in the I-EIV-SUGAR directory, execute the
+   following commands:
+
+% cd I-EIV-SUGAR
+% docker build -t crater/i-eiv-sugar .
+% docker run -it --rm -v \
+  ~/MultiPEM_Toolbox/Runfiles-Docker/IYDT-gsrp/Crater/I-EIV-SUGAR:\
+  /I-EIV-SUGAR -d crater/i-eiv-sugar
+
+4) Once the sub-analysis completes, the image may be
+   deleted by executing the command:
+
+% docker image rm crater/i-eiv-sugar
+
+*** MULTI-STAGE RAPID ASSESSMENT ***
+
+For rapid assessments in which the calibration inference
+is intended for use in multiple new event inferences,
+replace steps 3) and 4) above as follows:
+
+3) Build an image for the calibration inference (stage 1)
+   and run the image by starting a container. For example,
+   to run the calibration inference in the I-EIV-SUGAR-0
+   directory, execute the following commands:
+
+% cd I-EIV-SUGAR-0
+% docker build -f Dockerfile_cal -t crater/i-eiv-sugar-cal .
+% docker run -it --rm -v crater_eiv_cal:/crater_eiv_cal -v \
+  ~/MultiPEM_Toolbox/Runfiles-Docker/IYDT-gsrp/Crater/I-EIV-SUGAR-0:\
+  /I-EIV-SUGAR-0 -d crater/i-eiv-sugar-cal
+
+  The docker run command creates the volume crater_eiv_cal,
+  which is used to persist the .RData file resulting from
+  the stage 1 calibration inference so that it can be
+  used in other analyses (obviating the need to run the
+  same calibration inference multiple times).
+
+  Upon completion of the stage 1 run, build an image for the
+  new event inference (stage 2) and run the image by starting
+  a container. For example, to run the new event inference in
+  the I-EIV-SUGAR-0 directory, execute the following commands:
+
+% cd I-EIV-SUGAR-0
+% docker build -f Dockerfile_0 -t crater/i-eiv-sugar-0 .
+% docker run -it --rm -v crater_eiv_cal:/crater_eiv_cal:ro -v \
+  ~/MultiPEM_Toolbox/Runfiles-Docker/IYDT-gsrp/Crater/I-EIV-SUGAR-0:\
+  /I-EIV-SUGAR-0 -d crater/i-eiv-sugar-0
+
+  Note that this docker run command binds to the crater_eiv_cal
+  volume, in order to access the .RData file from the stage
+  1 calibration inference as desired.
+
+4) Once all analyses are complete, the volume and images
+   may be deleted by executing the commands:
+
+% docker volume rm crater_eiv_cal
+% docker image rm crater/i-eiv-sugar-cal crater/i-eiv-sugar-0
