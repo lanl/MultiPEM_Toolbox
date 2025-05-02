@@ -57,7 +57,7 @@ cal_dir = "I-SUGAR-hob-0"
 # single-stage analysis
 #r_dir = cal_dir
 # two-stage analysis
-r_dir = "4phen_eiv_cal"
+r_dir = "4phen_cal"
 
 # Phenomenologies for this analysis
 # 1 - seismic

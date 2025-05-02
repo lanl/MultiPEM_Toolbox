@@ -28,6 +28,7 @@ psim$pbeta <- pbeta # number of statistical coefficients
 psim$theta_names <- "W"
 psim$yield_scaling <- 1/3 # yield scaling coefficient
 psim$X <- X # known covariates
+psim$cal <- FALSE # indicator of global calibration parameters
 
 nsim <- 5 # number of test betas
 for(ii in 1:nsim){

@@ -39,6 +39,7 @@ psim$yield_scaling <- 1/3 # yield scaling coefficient
 psim$pressure_scaling <- 1/3 # pressure scaling coefficient
 psim$temp_scaling <- 1/2 # temperature scaling coefficient
 psim$X <- X # known covariates
+psim$cal <- FALSE # indicator of global calibration parameters
 
 nsim <- 5 # number of test betas
 for(ii in 1:nsim){

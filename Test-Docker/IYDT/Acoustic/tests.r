@@ -87,26 +87,6 @@ cat("\n")
 source(paste(tdir,"/test_rom_a2a_i.r",sep=""),local=TRUE)
 cat("\n")
 
-print("***** test_rom_a2b_d-0.r *****")
-cat("\n")
-source(paste(tdir,"/test_rom_a2b_d-0.r",sep=""),local=TRUE)
-cat("\n")
-
-print("***** test_rom_a2b_d.r *****")
-cat("\n")
-source(paste(tdir,"/test_rom_a2b_d.r",sep=""),local=TRUE)
-cat("\n")
-
-print("***** test_rom_a2b_i-0.r *****")
-cat("\n")
-source(paste(tdir,"/test_rom_a2b_i-0.r",sep=""),local=TRUE)
-cat("\n")
-
-print("***** test_rom_a2b_i.r *****")
-cat("\n")
-source(paste(tdir,"/test_rom_a2b_i.r",sep=""),local=TRUE)
-cat("\n")
-
 print("***** test_rom_a3_i-0.r *****")
 cat("\n")
 source(paste(tdir,"/test_rom_a3_i-0.r",sep=""),local=TRUE)

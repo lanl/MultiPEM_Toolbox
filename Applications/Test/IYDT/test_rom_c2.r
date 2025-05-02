@@ -27,6 +27,7 @@ psim <- list() # list collecting info for calculations
 psim$pbeta <- pbeta # number of statistical coefficients
 psim$theta_names <- "W"
 psim$X <- X # known covariates
+psim$cal <- FALSE # indicator of global calibration parameters
 
 nsim <- 5 # number of test betas
 for(ii in 1:nsim){

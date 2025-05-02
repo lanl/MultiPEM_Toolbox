@@ -34,6 +34,7 @@ psim$pbeta <- pbeta # number of statistical coefficients
 psim$iresp <- TRUE # indicator of displacement
 psim$yield_scaling <- 1/3 # yield scaling coefficient
 psim$X <- X # known covariates
+psim$cal <- FALSE # indicator of global calibration parameters
 psim$notExp <- notExp # transformation to positive reals
 psim$dnotExp <- dnotExp # derivative of notExp
 

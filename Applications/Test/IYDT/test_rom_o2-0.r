@@ -21,21 +21,15 @@ set.seed(31) # set random number seed
 ntest <- 6 # number of test inputs
 
 # Optical
-ncov <- 2 # number of known covariates
-X <- matrix(0,ntest,ncov) # known covariate matrix
-X[,1] <- log(runif(ntest,min=0.5,max=1.5)) # log scaled temp
-X[,2] <- log(runif(ntest,min=0.3,max=1.7)) # log scaled pressure 
-colnames(X) <- c("logTempSc","logPressureSc")
-               # known covariate names
+X <- NULL # known covariate matrix
 psim <- list() # list collecting info for calculations
 psim$theta_names <- c("W","HOB")
 psim$yield_scaling <- 1/3 # yield scaling coefficient
-psim$pressure_scaling <- 1/3 # pressure scaling coefficient
-psim$temp_scaling <- 1/2 # temperature scaling coefficient
 psim$X <- X # known covariates
+psim$notExp <- notExp # transformation to positive reals
 
 nsim <- 5 # number of test betas
-pbeta <- 2 # number of statistical coefficients
+pbeta <- 4 # number of statistical coefficients
 for(ii in 1:nsim){
   psim$beta <- runif(pbeta,min=-10,max=10)
   zeta <- c(log(runif(1,min=0.5,max=10^6)),

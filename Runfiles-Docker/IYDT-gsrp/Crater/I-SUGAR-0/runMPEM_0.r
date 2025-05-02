@@ -31,7 +31,7 @@ loc_dir = "I-SUGAR-0"
 # single-stage analysis
 #r_dir = loc_dir
 # two-stage analysis
-r_dir = "crater_eiv_cal"
+r_dir = "crater_cal"
 
 load(paste(r_dir,"/.RData",sep=""))
 

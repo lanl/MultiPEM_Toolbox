@@ -18,24 +18,22 @@
 require(numDeriv) # numerical derivatives package
 set.seed(10) # set random number seed
 
-pbeta <- 2 # number of statistical coefficients
+pbeta <- 4 # number of statistical coefficients
 ntest <- 6 # number of test inputs
 
 # Optical
-ncov <- 4 # number of known covariates
+ncov <- 2 # number of known covariates
 X <- matrix(0,ntest,ncov) # known covariate matrix
 X[,1] <- log(runif(ntest,min=0.5,max=10^6)) # log yield
 X[,2] <- runif(ntest,min=-10,max=100) # HOB/DOB
-X[,3] <- log(runif(ntest,min=0.5,max=1.5)) # log scaled temp
-X[,4] <- log(runif(ntest,min=0.3,max=1.7)) # log scaled pressure 
-colnames(X) <- c("W","HOB","logTempSc","logPressureSc")
-               # known covariate names
+colnames(X) <- c("W","HOB") # known covariate names
 psim <- list() # list collecting info for calculations
 psim$pbeta <- pbeta # number of statistical coefficients
 psim$yield_scaling <- 1/3 # yield scaling coefficient
-psim$pressure_scaling <- 1/3 # pressure scaling coefficient
-psim$temp_scaling <- 1/2 # temperature scaling coefficient
 psim$X <- X # known covariates
+psim$cal <- FALSE # indicator of global calibration parameters
+psim$notExp <- notExp # transformation to positive reals
+psim$dnotExp <- dnotExp # derivative of notExp
 
 nsim <- 5 # number of test betas
 for(ii in 1:nsim){

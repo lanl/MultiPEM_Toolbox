@@ -22,16 +22,18 @@ pbeta <- 5 # number of statistical coefficients
 ntest <- 1 # number of test inputs
 
 # Seismic
-ncov <- 1 # number of known covariates
+ncov <- 2 # number of known covariates
 X <- matrix(0,ntest,ncov) # known covariate matrix
 X[,1] <- log(runif(ntest,min=1,max=10)) # log range
-colnames(X) <- "lRange" # known covariate names
+X[,2] <- log(runif(ntest,min=0.5,max=3.5)) # Chem to nuke equiv
+colnames(X) <- c("lRange","C2N") # known covariate names
 psim <- list() # list collecting info for calculations
 psim$pbeta <- pbeta # number of statistical coefficients
-psim$theta_names <- c("W","HOB","C2N")
+psim$theta_names <- c("W","HOB")
 psim$iresp <- TRUE # indicator of displacement
 psim$yield_scaling <- 1/3 # yield scaling coefficient
 psim$X <- X # known covariates
+psim$cal <- FALSE # indicator of global calibration parameters
 psim$notExp <- notExp # transformation to positive reals
 psim$dnotExp <- dnotExp # derivative of notExp
 
@@ -39,8 +41,7 @@ nsim <- 5 # number of test betas
 for(ii in 1:nsim){
   zeta <- runif(pbeta,min=-10,max=10)
   zeta <- c(zeta, log(runif(1,min=0.5,max=10^6)),
-            runif(1,min=-10,max=100),
-            log(runif(1,min=0.5,max=3.5))) # unknown variables
+            runif(1,min=-10,max=100)) # unknown variables
   fsim <- f_s(zeta, psim) # call seismic forward model
   gsim <- g_s(zeta, psim) # call seismic jacobian(s)
   jnum <- jacobian(f_s, zeta, method.args=list(r=6),

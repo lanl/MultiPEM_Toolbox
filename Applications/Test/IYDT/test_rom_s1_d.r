@@ -33,12 +33,16 @@ psim$pbeta <- pbeta # number of statistical coefficients
 psim$iresp <- TRUE # indicator of displacement
 psim$yield_scaling <- 1/3 # yield scaling coefficient
 psim$X <- X # known covariates
+psim$cal <- TRUE # indicator of global calibration parameters
+psim$cal_par_names <- "C2N" # global calibration parameter names
+psim$ncalp = length(psim$cal_par_names)
 psim$notExp <- notExp # transformation to positive reals
 psim$dnotExp <- dnotExp # derivative of notExp
 
 nsim <- 5 # number of test betas
 for(ii in 1:nsim){
-  zeta <- runif(pbeta,min=-10,max=10) # unknown variables
+  zeta <- runif(pbeta,min=-10,max=10)
+  zeta <- c(zeta, log(runif(1,min=0.5,max=10^6))) # unknown variables
   fsim <- f_s(zeta, psim) # call seismic forward model
   gsim <- g_s(zeta, psim) # call seismic jacobian(s)
   jnum <- jacobian(f_s, zeta, method.args=list(r=6),
@@ -48,10 +52,11 @@ for(ii in 1:nsim){
   print("calculated forward model")
   print(fsim)
   print("calculated jacobian(s)")
-  print(gsim)
+  gsimc <- cbind(gsim$jbeta,gsim$jcalp)
+  print(gsimc)
   print("numerical jacobian")
   print(jnum)
   print("min/max calc-num jacobian")
-  print(range(gsim - jnum))
+  print(range(gsimc - jnum))
   cat("\n\n")
 }

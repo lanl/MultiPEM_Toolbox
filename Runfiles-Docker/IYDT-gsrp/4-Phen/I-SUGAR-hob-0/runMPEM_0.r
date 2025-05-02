@@ -31,7 +31,7 @@ loc_dir = "I-SUGAR-hob-0"
 # single-stage analysis
 #r_dir = loc_dir
 # two-stage analysis
-r_dir = "4phen_eiv_cal"
+r_dir = "4phen_cal"
 
 load(paste(r_dir,"/.RData",sep=""))
 

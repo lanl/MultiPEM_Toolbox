@@ -37,11 +37,15 @@ psim$yield_scaling <- 1/3 # yield scaling coefficient
 psim$pressure_scaling <- 1/3 # pressure scaling coefficient
 psim$temp_scaling <- 1/2 # temperature scaling coefficient
 psim$X <- X # known covariates
+psim$cal <- TRUE # indicator of global calibration parameters
+psim$cal_par_names <- "C2N" # global calibration parameter names
+psim$ncalp = length(psim$cal_par_names)
 
 nsim <- 5 # number of test betas
 for(ii in 1:nsim){
   zeta <- runif(pbeta,min=-10,max=10)
   zeta <- c(zeta, log(runif(1,min=0.5,max=10^6)),
+            log(runif(1,min=0.5,max=10^6)),
             runif(1,min=-10,max=100)) # unknown variables
   fsim <- f_a(zeta, psim) # call acoustic forward model
   gsim <- g_a(zeta, psim) # call acoustic jacobian(s)
@@ -52,7 +56,7 @@ for(ii in 1:nsim){
   print("calculated forward model")
   print(fsim)
   print("calculated jacobian(s)")
-  gsimc <- cbind(gsim$jbeta,gsim$jtheta)
+  gsimc <- cbind(gsim$jbeta,gsim$jcalp,gsim$jtheta)
   print(gsimc)
   print("numerical jacobian")
   print(jnum)

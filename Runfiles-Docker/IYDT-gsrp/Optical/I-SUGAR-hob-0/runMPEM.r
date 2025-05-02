@@ -54,7 +54,7 @@ cal_dir = "I-SUGAR-hob-0"
 # single-stage analysis
 #r_dir = cal_dir
 # two-stage analysis
-r_dir = "optic_eiv_cal"
+r_dir = "optic_cal"
 
 # Phenomenologies for this analysis
 # 1 - optical
