@@ -69,6 +69,9 @@ dat_dir = "Data"
 # Specify new event data directories
 dat_new = "crater_new.csv"
 
+# Size of objects to be exported for future
+options(future.globals.maxSize = Inf)
+
 # Phenomenologies for this analysis
 # 1 - crater (surface effects)
 

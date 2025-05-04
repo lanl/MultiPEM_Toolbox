@@ -72,6 +72,9 @@ dat_new = c("seismic_new.csv",
             "optical_new.csv",
             "crater_new.csv")
 
+# Size of objects to be exported for future
+options(future.globals.maxSize = Inf)
+
 # Phenomenologies for this analysis
 # 1 - seismic
 # 2 - acoustic

@@ -11,7 +11,7 @@ following steps, assuming the docker software has been installed
 on the user's machine:
 
 1) Build the mpem/global image (see the README file in the
-   MultiPEM_Toolbox_Package/Runfiles-Docker directory).
+   MultiPEM_Toolbox/Runfiles-Docker directory).
 
 2) Build the global/test image in this directory
 

@@ -16,7 +16,7 @@
 ########################################################################
 
 # directory to forward models and jacobians
-adir = "Code/IYDT"
+adir = "Code/IYDT-gsrp"
 
 # source forward models and jacobians
 source(paste(adir,"/forward.r",sep=""),local=TRUE)

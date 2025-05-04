@@ -15,10 +15,17 @@
 #                                                                      #
 ########################################################################
 
-install.packages("Matrix")
-install.packages("numDeriv")
-install.packages("doFuture")
-install.packages("adaptMCMC")
-install.packages("FME")
-install.packages("abind")
-install.packages("ramcmc")
+install.packages("Matrix",dependencies=TRUE,
+                 repos='http://cran.rstudio.com/')
+install.packages("numDeriv",dependencies=TRUE,
+                 repos='http://cran.rstudio.com/')
+install.packages("doFuture",dependencies=TRUE,
+                 repos='http://cran.rstudio.com/')
+install.packages("adaptMCMC",dependencies=TRUE,
+                 repos='http://cran.rstudio.com/')
+install.packages("FME",dependencies=TRUE,
+                 repos='http://cran.rstudio.com/')
+install.packages("abind",dependencies=TRUE,
+                 repos='http://cran.rstudio.com/')
+install.packages("ramcmc",dependencies=TRUE,
+                 repos='http://cran.rstudio.com/')

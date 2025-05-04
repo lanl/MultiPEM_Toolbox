@@ -3,7 +3,7 @@
 #
 
 # Base image https://hub.docker.com/u/rocker/
-FROM rocker/r-base:4.3.1
+FROM rocker/r-base:4.4.3
 
 ## create directories
 RUN mkdir -p /Code
