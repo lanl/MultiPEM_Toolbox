@@ -281,9 +281,9 @@ if( iBayes ){
 
   if( iBetaPrior ){
     # location of code for computing log-prior densities and gradients
-    prior_files_beta = "../Code/lp_beta_o.r"
+    prior_files_beta = paste(app_dir,"/lp_beta_o.r",sep="")
     if( igrad ){
-      gr_prior_files_beta = "../Code/glp_beta_o.r"
+      gr_prior_files_beta = paste(app_dir,"/glp_beta_o.r",sep="")
     } else { gr_prior_files_beta = NULL }
 
     # prior distribution for phenomenology 1
