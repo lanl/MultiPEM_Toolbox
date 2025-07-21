@@ -451,8 +451,7 @@ prepro = function(gdir,adir,rdir,cdir,Rh,pbeta,bopt=FALSE,nev=FALSE,
             p_cal$h[[hh]]$Source[[qq]][[rr]] =
               c(p_cal$h[[hh]]$Source[[qq]][[rr]],
                 source_levels$h[[hh]][ii])
-            if( !is.null(p_cal$h[[hh]]$X[[ii]][[rr]]) &&
-                "Path" %in% names(p_cal$h[[hh]]$X[[ii]][[rr]]) ){
+            if( !is.null(p_cal$h[[hh]]$X[[ii]][[rr]]) ){
               X = rbind(X,p_cal$h[[hh]]$X[[ii]][[rr]])
             }
           }
@@ -462,15 +461,17 @@ prepro = function(gdir,adir,rdir,cdir,Rh,pbeta,bopt=FALSE,nev=FALSE,
               (length(unique(X$Type)) > 1) ){
             stop("Source groups must have a common Type variable.")
           }
-          lpath = levels(factor(X$Path))
-          p_cal$h[[hh]]$Path[[qq]][[rr]] = lpath
-          npath = length(lpath)
           p_cal$h[[hh]]$ng[[qq]][rr] = nrow(X)
-          p_cal$h[[hh]]$nplev[qq,rr] = npath
-          p_cal$nh[[hh]]$i[[qq]]$r[[rr]]$p = vector("list",npath)
-          for( ss in 1:npath ){
-            ipath = which(X$Path == lpath[ss])
-            p_cal$nh[[hh]]$i[[qq]]$r[[rr]]$p[[ss]] = ipath
+          if( "Path" %in% names(X) ){
+            lpath = levels(factor(X$Path))
+            p_cal$h[[hh]]$Path[[qq]][[rr]] = lpath
+            npath = length(lpath)
+            p_cal$h[[hh]]$nplev[qq,rr] = npath
+            p_cal$nh[[hh]]$i[[qq]]$r[[rr]]$p = vector("list",npath)
+            for( ss in 1:npath ){
+              ipath = which(X$Path == lpath[ss])
+              p_cal$nh[[hh]]$i[[qq]]$r[[rr]]$p[[ss]] = ipath
+            }
           }
         }
       }
@@ -480,7 +481,8 @@ prepro = function(gdir,adir,rdir,cdir,Rh,pbeta,bopt=FALSE,nev=FALSE,
       lsource = length(unique(cal_data[[hh]]$Source[iresp_rr]))
       vcFlag = FALSE
       if( lsource == 1 ){
-        vcFlag = TRUE
+        if( is.null(p_cal$h[[hh]]$Path_Type) ||
+            "Nested" %in% p_cal$h[[hh]]$Path_Type ){ vcFlag = TRUE }
         print(paste("Warning: Insufficient Sources ",
                     "for Variance Component models with ",
                     "Phenomenology ",hh," and Response ",rr,".",
@@ -488,7 +490,8 @@ prepro = function(gdir,adir,rdir,cdir,Rh,pbeta,bopt=FALSE,nev=FALSE,
       } else {
         tsource = table(cal_data[[hh]]$Source[iresp_rr])
         if( all(tsource <= 1) ){
-          vcFlag = TRUE
+          if( is.null(p_cal$h[[hh]]$Path_Type) ||
+              "Nested" %in% p_cal$h[[hh]]$Path_Type ){ vcFlag = TRUE }
           print(paste("Warning: Insufficient number of observations ",
                       "per Source for Variance Component models with ",
                       "Phenomenology ",hh," and Response ",rr,".",
@@ -512,7 +515,7 @@ prepro = function(gdir,adir,rdir,cdir,Rh,pbeta,bopt=FALSE,nev=FALSE,
           }
         }
       }
-      if( !vcFlag ){
+      if( !vcFlag && ("Path" %in% names(cal_data[[hh]])) ){
         if( all(p_cal$h[[hh]]$nplev[1:nsource_groups[hh],rr] <= 1) ){
                                       print(paste(
                                       "Warning: Insufficient Paths for",
@@ -520,22 +523,20 @@ prepro = function(gdir,adir,rdir,cdir,Rh,pbeta,bopt=FALSE,nev=FALSE,
                                       " models with Phenomenology ",hh,
                                       " and Response ",rr,".",sep=""))
         } else {
-          if( "Path" %in% names(cal_data[[hh]]) ){
-            tsource = names(tsource)
-            npobs = NULL
-            for( qq in tsource ){
-              tpath = cal_data[[hh]]$Path[iresp_rr]
-              psource = which(cal_data[[hh]]$Source[iresp_rr] == qq)
-              ppath = table(tpath[psource])
-              if( length(ppath) > 1 ){ npobs = c(npobs,max(ppath)) }
-            }
-            if( all(npobs <= 1) ){
-              print(paste("Warning: Insufficient number of ",
-                          "observations per path for Path ",
-                          "Variance Component models with ",
-                          "Phenomenology ",hh,"and Response ",
-                          rr,".",sep=""))
-            }
+          tsource = names(tsource)
+          npobs = NULL
+          for( qq in tsource ){
+            tpath = cal_data[[hh]]$Path[iresp_rr]
+            psource = which(cal_data[[hh]]$Source[iresp_rr] == qq)
+            ppath = table(tpath[psource])
+            if( length(ppath) > 1 ){ npobs = c(npobs,max(ppath)) }
+          }
+          if( all(npobs <= 1) ){
+            print(paste("Warning: Insufficient number of ",
+                        "observations per path for Path ",
+                        "Variance Component models with ",
+                        "Phenomenology ",hh,"and Response ",
+                        rr,".",sep=""))
           }
         }
       }

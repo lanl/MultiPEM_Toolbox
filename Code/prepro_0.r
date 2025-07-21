@@ -235,22 +235,23 @@ prepro_0 = function(p_cal,gdir,adir,rdir,ndir,tnames,nimp=1,bopt=FALSE,
         p_cal$h[[hh]]$Source[[nsource_groups[hh]]][[rr]] =
           c(p_cal$h[[hh]]$Source[[nsource_groups[hh]]][[rr]],
             source_levels$h[[hh]][nsource[hh]])
-        if( !is.null(p_cal$h[[hh]]$X[[nsource[hh]]][[rr]]) &&
-            "Path" %in% names(p_cal$h[[hh]]$X[[nsource[hh]]][[rr]]) ){
-          lpath =
-            levels(factor(p_cal$h[[hh]]$X[[nsource[hh]]][[rr]]$Path))
-          p_cal$h[[hh]]$Path[[nsource_groups[hh]]][[rr]] = lpath
-          npath = length(lpath)
+        if( !is.null(p_cal$h[[hh]]$X[[nsource[hh]]][[rr]]) ){
           p_cal$h[[hh]]$ng[[nsource_groups[hh]]][rr] =
             p_cal$h[[hh]]$n[[nsource[hh]]][rr]
-          p_cal$h[[hh]]$nplev[nsource_groups[hh],rr] = npath
-          p_cal$nh[[hh]]$i[[nsource_groups[hh]]]$r[[rr]]$p =
-            vector("list",npath)
-          for( ss in 1:npath ){
-            ipath = which(p_cal$h[[hh]]$X[[nsource[hh]]][[rr]]$Path ==
-                          lpath[ss])
-            p_cal$nh[[hh]]$i[[nsource_groups[hh]]]$r[[rr]]$p[[ss]] =
-              ipath
+          if( "Path" %in% names(p_cal$h[[hh]]$X[[nsource[hh]]][[rr]]) ){
+            lpath =
+            levels(factor(p_cal$h[[hh]]$X[[nsource[hh]]][[rr]]$Path))
+            p_cal$h[[hh]]$Path[[nsource_groups[hh]]][[rr]] = lpath
+            npath = length(lpath)
+            p_cal$h[[hh]]$nplev[nsource_groups[hh],rr] = npath
+            p_cal$nh[[hh]]$i[[nsource_groups[hh]]]$r[[rr]]$p =
+              vector("list",npath)
+            for( ss in 1:npath ){
+              ipath = which(p_cal$h[[hh]]$X[[nsource[hh]]][[rr]]$Path ==
+                            lpath[ss])
+              p_cal$nh[[hh]]$i[[nsource_groups[hh]]]$r[[rr]]$p[[ss]] =
+                ipath
+            }
           }
         }
       }
@@ -386,7 +387,7 @@ prepro_0 = function(p_cal,gdir,adir,rdir,ndir,tnames,nimp=1,bopt=FALSE,
   p_cal = pc_0(p_cal$mle_cal, p_cal)
   if( exists("mpi",where=p_cal,inherits=FALSE) ){
     if( nimp > 1 ){
-      mpi = p_cal$mpi
+      mpi = as.matrix(p_cal$mpi)
       nmpi = nrow(mpi)
       p_cal$mpi = NULL
       if( nmpi < nimp ){
@@ -401,7 +402,7 @@ prepro_0 = function(p_cal,gdir,adir,rdir,ndir,tnames,nimp=1,bopt=FALSE,
       }
       if( nmpi > 1 ){
         imp_samp = round(seq(1,nmpi,length=nimp))
-        p_cal$mpi = mpi[imp_samp,]
+        p_cal$mpi = mpi[imp_samp,,drop=FALSE]
       } else {
         print(paste("Insufficient posterior samples for multiple ",
                     "imputation.",sep=""))

@@ -481,21 +481,30 @@ info_ll_0 = function(opt, pc)
 
               # calculate components of Jacobian matrix
               if( pc$h[[hh]]$nev[ii] ){
-                Jac_th0_r = rbind(Jac_th0_r,jac$jtheta)
+                if( is.list(jac) ){ tjac = jac$jtheta
+                } else { tjac = jac }
+                Jac_th0_r = rbind(Jac_th0_r,tjac)
               }
               if( pm$cal ){
-                Jac_c_r = rbind(Jac_c_r,jac$jcalp)
+                if( is.list(jac) ){ tjac = jac$jcalp
+                } else { tjac = jac }
+                Jac_c_r = rbind(Jac_c_r,tjac)
               }
               if( "eiv" %in% pnames && !is.null(pc$h[[hh]]$eiv[[ii]]) ){
-                g_w_r = c(g_w_r,jac$jtheta)
+                if( is.list(jac) ){ tjac = jac$jtheta
+                } else { tjac = jac }
+                g_w_r = c(g_w_r,tjac)
               }
-              if( is.list(jac) ){ jac = jac$jbeta }
-              if( is.null(betatr) && pc$h[[hh]]$pbeta[rr] > 0 ){
+              if( is.list(jac) && exists("jbeta",where=jac,
+                  inherits=FALSE) ){ jac = jac$jbeta }
+              if( is.null(betatr) && pbeta > 0 &&
+                  pc$h[[hh]]$pbeta[rr] > 0 ){
                 ir = st_nir+(1:n_hi[rr])
                 ic = st_beta+(1:pc$h[[hh]]$pbeta[rr])
                 Jac_0_r[ir,ic] = jac
               }
-              if( is.null(betar) && pc$h[[hh]]$pbetat[[tt]][rr] > 0 ){
+              if( is.null(betar) && ptbeta > 0 &&
+                  pc$h[[hh]]$pbetat[[tt]][rr] > 0 ){
                 ir = st_nir+(1:n_hi[rr])
                 ic = st_betatr+(1:pc$h[[hh]]$pbetat[[tt]][rr])
                 Jac_t_r[ir,ic] = jac
