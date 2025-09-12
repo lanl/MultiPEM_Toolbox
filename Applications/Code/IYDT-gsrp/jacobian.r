@@ -253,7 +253,7 @@ g_o <- function(zeta, params)
   rownames(jbeta_s) <- colnames(jbeta_s) <- NULL
 
   if (ntheta > 0){
-    jtheta_s <- beta[2]+2*t6*t4*t5*params$yield_scaling/t7
+    jtheta_s <- as.matrix(beta[2]+2*t6*t4*t5*params$yield_scaling/t7)
     if (ntheta > 1){
       jtheta_s <- cbind(jtheta_s,-2*t6*t1*t3*t5/t2/t7)
     }

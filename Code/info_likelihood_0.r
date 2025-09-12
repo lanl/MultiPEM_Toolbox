@@ -778,21 +778,30 @@ info_ll_0 = function(opt, pc)
   if( is(Catch$value,"Matrix") ){ CI_nev_0 = Catch$value
   } else {
     cat("I_0(theta_0) is not positive definite.\n")
-    I_nev_0 = nearPD(I_nev_0)$mat
-    CI_nev_0 = chol(I_nev_0)
+    Catch = pc$tryCatch.W.E(nearPD(I_nev_0))
+    if( is.list(Catch$value) && is(Catch$value$mat,"Matrix") ){
+      I_nev_0 = Catch$value$mat
+      CI_nev_0 = chol(I_nev_0)
+    } else { CI_nev_0 = NULL }
   }
-  II_nev_0 = chol2inv(CI_nev_0)
+  if( !is.null(CI_nev_0) ){ II_nev_0 = chol2inv(CI_nev_0)
+  } else { II_nev_0 = NULL }
   Cmat$II_nev_0 = II_nev_0
+  if( !is.null(II_nev_0) ){ Cmat$acov_0 = 1 }
   if( pc$ncalp > 0 ){
     I_pp = forceSymmetric(I_pp)
     Catch = pc$tryCatch.W.E(chol(I_pp))
     if( is(Catch$value,"Matrix") ){ C_pp = Catch$value
     } else {
       cat("I_c(calp) is not positive definite.\n")
-      I_pp = nearPD(I_pp)$mat
-      C_pp = chol(I_pp)
+      Catch = pc$tryCatch.W.E(nearPD(I_pp))
+      if( is.list(Catch$value) && is(Catch$value$mat,"Matrix") ){
+        I_pp = Catch$value$mat
+        C_pp = chol(I_pp)
+      } else { C_pp = NULL }
     }
-    II_pp = chol2inv(C_pp)
+    if( !is.null(C_pp) ){ II_pp = chol2inv(C_pp)
+    } else { II_pp = NULL }
   }
   S_00 = I_nev
   if( pc$pbeta > 0 || pc$ptbeta > 0 ){
@@ -842,17 +851,20 @@ info_ll_0 = function(opt, pc)
     if( is(Catch$value,"Matrix") ){ C_00 = Catch$value
     } else {
       cat("Adjusted I(theta_0) is not positive definite.\n")
-      S_00 = nearPD(S_00)$mat
-      C_00 = chol(S_00)
+      Catch = pc$tryCatch.W.E(nearPD(S_00))
+      if( is.list(Catch$value) && is(Catch$value$mat,"Matrix") ){
+        S_00 = Catch$value$mat
+        C_00 = chol(S_00)
+      } else { C_00 = NULL }
     }
-    IS_00 = chol2inv(C_00)
+    if( !is.null(C_00) ){ IS_00 = chol2inv(C_00)
+    } else { IS_00 = NULL }
+    if( !is.null(IS_00) ){ Cmat$acov_0 = 2 }
   } else { IS_00 = II_nev_0 }
   Cmat$II_nev = IS_00
   theta0Hat = opt$theta0
+  I_nev_0_it = I_nev_0
   I_nev_it = S_00
-  if( exists("rapid",where=pc,inherits=FALSE) && pc$rapid ){
-    I_nev_0_it = I_nev_0
-  }
   iit = FALSE
   if( exists("itransform",where=pc,inherits=FALSE) ){
     if( pc$itransform ){
@@ -880,20 +892,31 @@ info_ll_0 = function(opt, pc)
     }
     Tf_b = diag(pc$ntheta0)
     diag(Tf_b) = dtheta0Hat
+    I_nev_0_it = t(Tf_b) %*% I_nev_0_it %*% Tf_b
     I_nev_it = t(Tf_b) %*% I_nev_it %*% Tf_b
-    if( exists("rapid",where=pc,inherits=FALSE) && pc$rapid ){
-      I_nev_0_it = t(Tf_b) %*% I_nev_0_it %*% Tf_b
-    }
   }
   if( exists("itransform",where=pc,inherits=FALSE) ){
     if( pc$itransform ){
+      I_nev_0_it = t(Tf) %*% I_nev_0_it %*% Tf
       I_nev_it = t(Tf) %*% I_nev_it %*% Tf
-      if( exists("rapid",where=pc,inherits=FALSE) && pc$rapid ){
-        I_nev_0_it = t(Tf) %*% I_nev_0_it %*% Tf
-      }
     }
   }
   if( iit ){
+    I_nev_0_it = forceSymmetric(I_nev_0_it)
+    Catch = pc$tryCatch.W.E(chol(I_nev_0_it))
+    if( is(Catch$value,"Matrix") ){ CI_nev_0_it = Catch$value
+    } else {
+      cat(paste("I_0(theta_0) (untransformed theta_0) is ",
+                "not positive definite.\n",sep=""))
+      Catch = pc$tryCatch.W.E(nearPD(I_nev_0_it))
+      if( is.list(Catch$value) && is(Catch$value$mat,"Matrix") ){
+        I_nev_0_it = Catch$value$mat
+        CI_nev_0_it = chol(I_nev_0_it)
+      } else { CI_nev_0_it = NULL }
+    }
+    if( !is.null(CI_nev_0_it) ){ II_nev_0_it = chol2inv(CI_nev_0_it)
+    } else { II_nev_0_it = NULL }
+    Cmat$II_nev_0_it = II_nev_0_it
     I_nev_it = forceSymmetric(I_nev_it)
     Catch = pc$tryCatch.W.E(chol(I_nev_it))
     if( is(Catch$value,"Matrix") ){ CI_nev_it = Catch$value
@@ -905,26 +928,16 @@ info_ll_0 = function(opt, pc)
         cat(paste("Adjusted I(theta_0) (untransformed theta_0) is ",
                   "not positive definite.\n",sep=""))
       }
-      I_nev_it = nearPD(I_nev_it)$mat
-      CI_nev_it = chol(I_nev_it)
+      Catch = pc$tryCatch.W.E(nearPD(I_nev_it))
+      if( is.list(Catch$value) && is(Catch$value$mat,"Matrix") ){
+        I_nev_it = Catch$value$mat
+        CI_nev_it = chol(I_nev_it)
+      } else { CI_nev_it = NULL }
     }
-    II_nev_it = chol2inv(CI_nev_it)
+    if( !is.null(CI_nev_it) ){ II_nev_it = chol2inv(CI_nev_it)
+    } else { II_nev_it = NULL }
     Cmat$II_nev_it = II_nev_it
-    if( exists("rapid",where=pc,inherits=FALSE) && pc$rapid ){
-      I_nev_0_it = forceSymmetric(I_nev_0_it)
-      Catch = pc$tryCatch.W.E(chol(I_nev_0_it))
-      if( is(Catch$value,"Matrix") ){ CI_nev_0_it = Catch$value
-      } else {
-        cat(paste("I_0(theta_0) (untransformed theta_0) is ",
-                  "not positive definite.\n",sep=""))
-        I_nev_0_it = nearPD(I_nev_0_it)$mat
-        CI_nev_0_it = chol(I_nev_0_it)
-      }
-      II_nev_0_it = chol2inv(CI_nev_0_it)
-      Cmat$II_nev_0_it = II_nev_0_it
-    }
   }
-  Cmat$acov_0 = 1
 
   if( pc$ncalp > 0 ){
     S_pp = I_pp
@@ -977,13 +990,17 @@ info_ll_0 = function(opt, pc)
       if( is(Catch$value,"Matrix") ){ C_pp = Catch$value
       } else {
         cat("Adjusted I(calp) is not positive definite.\n")
-        S_pp = nearPD(S_pp)$mat
-        C_pp = chol(S_pp)
+        Catch = pc$tryCatch.W.E(nearPD(S_pp))
+        if( is.list(Catch$value) && is(Catch$value$mat,"Matrix") ){
+          S_pp = Catch$value$mat
+          C_pp = chol(S_pp)
+        } else { C_pp = NULL }
       }
-      II_pp = chol2inv(C_pp)
+      if( !is.null(C_pp) ){ II_pp = chol2inv(C_pp)
+      } else { II_pp = NULL }
     }
     Cmat$II_calp = II_pp
-    Cmat$acov_cal = 1
+    if( !is.null(II_pp) ){ Cmat$acov_cal = 1 }
   }
 
   return(Cmat)

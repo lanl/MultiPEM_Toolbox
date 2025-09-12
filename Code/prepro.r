@@ -364,20 +364,22 @@ prepro = function(gdir,adir,rdir,cdir,Rh,pbeta,bopt=FALSE,nev=FALSE,
       }
       p_cal$h[[hh]]$i[[qq]]$cov_pairs = vector("list",Rh[hh])
       for( r1 in 1:Rh[hh] ){
-        iresp_r1 = !is.na(Y[,r1])
-        nr1 = sum(iresp_r1)
+        tmp1 = !is.na(Y[,r1])
+        iresp_r1 = tmp1
+        nr1 = sum(tmp1)
         if( nr1 > 0 ){ iresp_r1[which(iresp_r1)] = 1:nr1 }
         p_cal$h[[hh]]$i[[qq]]$cov_pairs[[r1]] = vector("list",Rh[hh])
         for( r2 in r1:Rh[hh] ){
-          iresp_r2 = !is.na(Y[,r2])
-          nr2 = sum(iresp_r2)
+          tmp2 = !is.na(Y[,r2])
+          iresp_r2 = tmp2
+          nr2 = sum(tmp2)
           if( nr2 > 0 ){ iresp_r2[which(iresp_r2)] = 1:nr2 }
           if( nr1 > 0 && nr2 > 0 ){
-            iresp_r1_r2 = (iresp_r1 & iresp_r2)
-            n_r1_r2 = sum(iresp_r1_r2)
+            iresp_r1_r2 = which(tmp1 & tmp2)
+            n_r1_r2 = length(iresp_r1_r2)
             if( n_r1_r2 > 0 ){
-              iresp_r1 = iresp_r1[which(iresp_r1_r2)]
-              iresp_r2 = iresp_r2[which(iresp_r1_r2)]
+              iresp_r1 = iresp_r1[iresp_r1_r2]
+              iresp_r2 = iresp_r2[iresp_r1_r2]
               p_cal$h[[hh]]$i[[qq]]$cov_pairs[[r1]][[r2]] =
                 (iresp_r2-1)*nr1+iresp_r1
             }
@@ -414,21 +416,23 @@ prepro = function(gdir,adir,rdir,cdir,Rh,pbeta,bopt=FALSE,nev=FALSE,
       }
       p_cal$h[[hh]]$i[[nsource[hh]]]$cov_pairs = vector("list",Rh[hh])
       for( r1 in 1:Rh[hh] ){
-        iresp_r1 = !is.na(Y[,r1])
-        nr1 = sum(iresp_r1)
+        tmp1 = !is.na(Y[,r1])
+        iresp_r1 = tmp1
+        nr1 = sum(tmp1)
         if( nr1 > 0 ){ iresp_r1[which(iresp_r1)] = 1:nr1 }
         p_cal$h[[hh]]$i[[nsource[hh]]]$cov_pairs[[r1]] =
           vector("list",Rh[hh])
         for( r2 in r1:Rh[hh] ){
-          iresp_r2 = !is.na(Y[,r2])
-          nr2 = sum(iresp_r2)
+          tmp2 = !is.na(Y[,r2])
+          iresp_r2 = tmp2
+          nr2 = sum(tmp2)
           if( nr2 > 0 ){ iresp_r2[which(iresp_r2)] = 1:nr2 }
           if( nr1 > 0 && nr2 > 0 ){
-            iresp_r1_r2 = (iresp_r1 & iresp_r2)
-            n_r1_r2 = sum(iresp_r1_r2)
+            iresp_r1_r2 = which(tmp1 & tmp2)
+            n_r1_r2 = length(iresp_r1_r2)
             if( n_r1_r2 > 0 ){
-              iresp_r1 = iresp_r1[which(iresp_r1_r2)]
-              iresp_r2 = iresp_r2[which(iresp_r1_r2)]
+              iresp_r1 = iresp_r1[iresp_r1_r2]
+              iresp_r2 = iresp_r2[iresp_r1_r2]
               p_cal$h[[hh]]$i[[nsource[hh]]]$cov_pairs[[r1]][[r2]] =
                 (iresp_r2-1)*nr1+iresp_r1
             }

@@ -622,10 +622,14 @@ info_ll_cal = function(opt, pc)
   if( is(Catch$value,"Matrix") ){ C_pp = Catch$value
   } else {
     cat("I_c(calp) is not positive definite.\n")
-    I_pp = nearPD(I_pp)$mat
-    C_pp = chol(I_pp)
+    Catch = pc$tryCatch.W.E(nearPD(I_pp))
+    if( is.list(Catch$value) && is(Catch$value$mat,"Matrix") ){
+      I_pp = Catch$value$mat
+      C_pp = chol(I_pp)
+    } else { C_pp = NULL }
   }
-  II_pp = chol2inv(C_pp)
+  if( !is.null(C_pp) ){ II_pp = chol2inv(C_pp)
+  } else { II_pp = NULL }
   S_pp = I_pp
   if( exists("eiv",where=pc,inherits=FALSE) && pc$eiv ){
     S_ww = I_wc + I_ww
@@ -674,13 +678,17 @@ info_ll_cal = function(opt, pc)
     if( is(Catch$value,"Matrix") ){ C_pp = Catch$value
     } else {
       cat("Adjusted I(calp) is not positive definite.\n")
-      S_pp = nearPD(S_pp)$mat
-      C_pp = chol(S_pp)
+      Catch = pc$tryCatch.W.E(nearPD(S_pp))
+      if( is.list(Catch$value) && is(Catch$value$mat,"Matrix") ){
+        S_pp = Catch$value$mat
+        C_pp = chol(S_pp)
+      } else { C_pp = NULL }
     }
-    II_pp = chol2inv(C_pp)
+    if( !is.null(C_pp) ){ II_pp = chol2inv(C_pp)
+    } else { II_pp = NULL }
   }
   Cmat$II_calp = II_pp
-  Cmat$acov_cal = 1
+  if( !is.null(II_pp) ){ Cmat$acov_cal = 1 }
 
   return(Cmat)
 }

@@ -128,7 +128,7 @@ g0_o <- function(zeta, params)
   t5 <- exp(-t4)
   t6 <- params$notExp(beta[3])
   t7 <- 1+t6*t5
-  jtheta_s <- beta[2]+2*t6*t4*t5*params$yield_scaling/t7
+  jtheta_s <- as.matrix(beta[2]+2*t6*t4*t5*params$yield_scaling/t7)
   if (ntheta > 1){
     jtheta_s <- cbind(jtheta_s,-2*t6*t1*t3*t5/t2/t7)
   }

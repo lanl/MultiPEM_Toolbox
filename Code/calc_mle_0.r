@@ -300,7 +300,6 @@ calc_mle_0 = function(p_cal,gdir,adir,f0,nst=10,ncor=1,ci_lev=0.95,
     # Calculate asymptotic covariance matrix
     # for new event inference parameters
     if( igrad ){
-      p_cal$rapid = TRUE
       p_cal$Sigma_mle_0 = info_ll_0(opt_mle, p_cal)
     } else {
       if( p_cal$opt_B ){
