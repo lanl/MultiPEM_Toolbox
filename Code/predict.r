@@ -180,6 +180,8 @@ predict = function(x, pc)
       resid = NULL
       if( pc$pvc_1 > 0 && any(pc$h[[hh]]$pvc_1 > 0) ){
         Sigma_h1 = vector("list",tsc)
+        iZ1 = NULL
+        st_z1 = 0
         Z1 = vector("list",tsc)
       }
       Omega = vector("list",tsc)
@@ -241,6 +243,7 @@ predict = function(x, pc)
 
         # covariance matrices
         if( pc$pvc_1 > 0 && any(pc$h[[hh]]$pvc_1 > 0) ){
+          iZ1_s = NULL
           Z1_s = vector("list",Rh)
           Xi_hi1 = vector("list",Rh)
         }
@@ -304,8 +307,11 @@ predict = function(x, pc)
 
             # calculate components of model covariance matrix
             if( pc$pvc_1 > 0 && any(pc$h[[hh]]$pvc_1 > 0) ){
+              st_z1_s = 0
+              if( rr > 1 ){ st_z1_s = sum(n_hi[1:(rr-1)]) }
               if( pc$h[[hh]]$pvc_1[rr] > 0 &&
                   !is.null(pc$h[[hh]]$Z1[[ii]][[rr]]) ){
+                iZ1_s = c(iZ1_s,st_z1_s+(1:n_hi[rr]))
                 Z1_s[[rr]] = pc$h[[hh]]$Z1[[ii]][[rr]]
                 Xi_hi1[[rr]] = pc$h[[hh]]$Z1[[ii]][[rr]] %*%
                                Sigma_hr1[[rr]] %*%
@@ -321,6 +327,8 @@ predict = function(x, pc)
         # components of posterior source effects covariance matrix
         if( pc$pvc_1 > 0 && any(pc$h[[hh]]$pvc_1 > 0) ){
           Sigma_h1[[sc]] = bdiag(Sigma_hr1[!sapply(Sigma_hr1,is.null)])
+          iZ1 = c(iZ1,st_z1+iZ1_s)
+          st_z1 = st_z1 + n_hi_tot
           Z1[[sc]] = bdiag(Z1_s[!sapply(Z1_s,is.null)])
         }
         # calculate model covariance matrix
@@ -408,7 +416,8 @@ predict = function(x, pc)
         }
         ILcov_1 = chol2inv(cLcov_1)
         B_1 = Sigma_h1 %*% t(Z1)
-        ICov_1 = Lcov_1 + Z1 %*% B_1
+        ICov_1 = Lcov_1
+        ICov_1[iZ1,iZ1] = ICov_1[iZ1,iZ1] + Z1 %*% B_1
         Catch = pc$tryCatch.W.E(chol(ICov_1))
         if( is(Catch$value,"Matrix") ){ cICov_1 = Catch$value
         } else {
@@ -417,14 +426,14 @@ predict = function(x, pc)
           cICov_1 = chol(ICov_1)
         }
         Cov_1 = chol2inv(cICov_1)
-        Cov_1 = Sigma_h1 - B_1 %*% Cov_1 %*% t(B_1)
+        Cov_1 = Sigma_h1 - B_1 %*% Cov_1[iZ1,iZ1] %*% t(B_1)
         Catch = pc$tryCatch.W.E(chol(Cov_1))
         if( !is(Catch$value,"Matrix") ){
           cat(paste("Source effect posterior covariance matrix ",
               "is not positive definite.\n",sep=""))
           Cov_1 = nearPD(Cov_1)$mat
         }
-        mu_b1 = t(Z1) %*% ILcov_1 %*% resid
+        mu_b1 = t(Z1) %*% ILcov_1[iZ1,iZ1] %*% resid[iZ1]
         mu_b1 = Cov_1 %*% mu_b1
         seffects = Z1 %*% mu_b1
         sd_b1 = sqrt(diag(Cov_1))
@@ -432,19 +441,23 @@ predict = function(x, pc)
         for( ii in pc$h[[hh]]$Source_Groups[[gg]] ){
           for( rr in 1:Rh ){
             if( pc$h[[hh]]$n[[ii]][rr] > 0 ){
-              ib1 = kk+1:nrow(Sigma_hr1[[rr]])
-              pred_out$h[[hh]]$mu_b1[[rr]] =
-                c(pred_out$h[[hh]]$mu_b1[[rr]],mu_b1[ib1])
-              pred_out$h[[hh]]$sd_b1[[rr]] =
-                c(pred_out$h[[hh]]$sd_b1[[rr]],sd_b1[ib1])
-              kk = kk + nrow(Sigma_hr1[[rr]])
+              if( !is.null(Sigma_hr1[[rr]]) ){
+                ib1 = kk+1:nrow(Sigma_hr1[[rr]])
+                pred_out$h[[hh]]$mu_b1[[rr]] =
+                  c(pred_out$h[[hh]]$mu_b1[[rr]],mu_b1[ib1])
+                pred_out$h[[hh]]$sd_b1[[rr]] =
+                  c(pred_out$h[[hh]]$sd_b1[[rr]],sd_b1[ib1])
+                kk = kk + nrow(Sigma_hr1[[rr]])
+              }
             }
           }
         }
         for( rr in 1:Rh ){
-          snames[[rr]] = c(snames[[rr]],
-                           rep(pc$h[[hh]]$Source[[gg]][[rr]],
-                               each=nrow(Sigma_hr1[[rr]])))
+          if( !is.null(Sigma_hr1[[rr]]) ){
+            snames[[rr]] = c(snames[[rr]],
+                             rep(pc$h[[hh]]$Source[[gg]][[rr]],
+                                 each=nrow(Sigma_hr1[[rr]])))
+          }
           if( "Omega_ic" %in% pnames ){
             ic = pc$h[[hh]]$Omega_ic[[gg]][[rr]]
           } else {
@@ -469,7 +482,7 @@ predict = function(x, pc)
       if( pc$pvc_2 > 0 && any(pc$h[[hh]]$pvc_2 > 0) ){
         Lcov_2 = Lcov
         if( pc$pvc_1 > 0 && any(pc$h[[hh]]$pvc_1 > 0) ){
-          Lcov_2 = Lcov_2 + t(B_1) %*% t(Z1)
+          Lcov_2[iZ1,iZ1] = Lcov_2[iZ1,iZ1] + t(B_1) %*% t(Z1)
         }
         Catch = pc$tryCatch.W.E(chol(Lcov_2))
         if( is(Catch$value,"Matrix") ){ cLcov_2 = Catch$value
@@ -502,18 +515,22 @@ predict = function(x, pc)
         kk = 0
         for( rr in 1:Rh ){
           if( pc$h[[hh]]$ng[[gg]][rr] > 0 ){
-            ib2 = kk+1:(pc$h[[hh]]$nplev[gg,rr]*nrow(Sigma_hr2[[rr]]))
-            pred_out$h[[hh]]$mu_b2[[rr]] =
-              c(pred_out$h[[hh]]$mu_b2[[rr]],mu_b2[ib2])
-            pred_out$h[[hh]]$sd_b2[[rr]] =
-              c(pred_out$h[[hh]]$sd_b2[[rr]],sd_b2[ib2])
-            kk = kk + pc$h[[hh]]$nplev[gg,rr]*nrow(Sigma_hr2[[rr]])
+            if( !is.null(Sigma_hr2[[rr]]) ){
+              ib2 = kk+1:(pc$h[[hh]]$nplev[gg,rr]*nrow(Sigma_hr2[[rr]]))
+              pred_out$h[[hh]]$mu_b2[[rr]] =
+                c(pred_out$h[[hh]]$mu_b2[[rr]],mu_b2[ib2])
+              pred_out$h[[hh]]$sd_b2[[rr]] =
+                c(pred_out$h[[hh]]$sd_b2[[rr]],sd_b2[ib2])
+              kk = kk + pc$h[[hh]]$nplev[gg,rr]*nrow(Sigma_hr2[[rr]])
+            }
           }
         }
         for( rr in 1:Rh ){
-          panames[[rr]] = c(panames[[rr]],
-                            rep(pc$h[[hh]]$Path[[gg]][[rr]],
-                                each=nrow(Sigma_hr2[[rr]])))
+          if( !is.null(Sigma_hr2[[rr]]) ){
+            panames[[rr]] = c(panames[[rr]],
+                              rep(pc$h[[hh]]$Path[[gg]][[rr]],
+                                  each=nrow(Sigma_hr2[[rr]])))
+          }
           ic = pc$h[[hh]]$Omega_ic[[gg]][[rr]]
           tpeffects = peffects[ic]
           kk = 0
@@ -530,14 +547,18 @@ predict = function(x, pc)
     }
     if( pc$pvc_1 > 0 && any(pc$h[[hh]]$pvc_1 > 0) ){
       for( rr in 1:Rh ){
-        names(pred_out$h[[hh]]$mu_b1[[rr]]) = snames[[rr]]
-        names(pred_out$h[[hh]]$sd_b1[[rr]]) = snames[[rr]]
+        if( !is.null(pred_out$h[[hh]]$mu_b1[[rr]]) ){
+          names(pred_out$h[[hh]]$mu_b1[[rr]]) = snames[[rr]]
+          names(pred_out$h[[hh]]$sd_b1[[rr]]) = snames[[rr]]
+        }
       }
     }
     if( pc$pvc_2 > 0 && any(pc$h[[hh]]$pvc_2 > 0) ){
       for( rr in 1:Rh ){
-        names(pred_out$h[[hh]]$mu_b2[[rr]]) = panames[[rr]]
-        names(pred_out$h[[hh]]$sd_b2[[rr]]) = panames[[rr]]
+        if( !is.null(pred_out$h[[hh]]$mu_b2[[rr]]) ){
+          names(pred_out$h[[hh]]$mu_b2[[rr]]) = panames[[rr]]
+          names(pred_out$h[[hh]]$sd_b2[[rr]]) = panames[[rr]]
+        }
       }
     }
   }
