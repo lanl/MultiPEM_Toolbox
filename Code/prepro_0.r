@@ -241,10 +241,13 @@ prepro_0 = function(p_cal,gdir,adir,rdir,ndir,tnames,nimp=1,bopt=FALSE,
           p_cal$h[[hh]]$ng[[nsource_groups[hh]]][rr] =
             p_cal$h[[hh]]$n[[nsource[hh]]][rr]
           if( "Path" %in% names(p_cal$h[[hh]]$X[[nsource[hh]]][[rr]]) ){
-            lpath =
-            levels(factor(p_cal$h[[hh]]$X[[nsource[hh]]][[rr]]$Path))
-            p_cal$h[[hh]]$Path[[nsource_groups[hh]]][[rr]] = lpath
+            lpath = levels(p_cal$h[[hh]]$X[[nsource[hh]]][[rr]]$Path)
             npath = length(lpath)
+            for( ss in 1:npath ){
+              lpath[ss] = paste("(",lpath[ss],")",sep="")
+            }
+            levels(p_cal$h[[hh]]$X[[nsource[hh]]][[rr]]$Path) = lpath
+            p_cal$h[[hh]]$Path[[nsource_groups[hh]]][[rr]] = lpath
             p_cal$h[[hh]]$nplev[nsource_groups[hh],rr] = npath
             p_cal$nh[[hh]]$i[[nsource_groups[hh]]]$r[[rr]]$p =
               vector("list",npath)

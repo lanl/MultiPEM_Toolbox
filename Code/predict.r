@@ -435,7 +435,8 @@ predict = function(x, pc)
         }
         mu_b1 = t(Z1) %*% ILcov_1[iZ1,iZ1] %*% resid[iZ1]
         mu_b1 = Cov_1 %*% mu_b1
-        seffects = Z1 %*% mu_b1
+        seffects = numeric(st_z1)
+        seffects[iZ1] = Z1 %*% mu_b1
         sd_b1 = sqrt(diag(Cov_1))
         kk = 0
         for( ii in pc$h[[hh]]$Source_Groups[[gg]] ){
@@ -458,22 +459,14 @@ predict = function(x, pc)
                              rep(pc$h[[hh]]$Source[[gg]][[rr]],
                                  each=nrow(Sigma_hr1[[rr]])))
           }
-          if( "Omega_ic" %in% pnames ){
-            ic = pc$h[[hh]]$Omega_ic[[gg]][[rr]]
-          } else {
-            st_ng = 0
-            if( rr > 1 ){
-              st_ng = st_ng + sum(pc$h[[hh]]$ng[[gg]][1:(rr-1)])
-            }
-            ic = st_ng + (1:pc$h[[hh]]$ng[[gg]][rr])
-          }
-          tseffects = seffects[ic]
-          kk = 0
-          for( ii in pc$h[[hh]]$Source_Groups[[gg]] ){
+        }
+        kk = 0
+        for( ii in pc$h[[hh]]$Source_Groups[[gg]] ){
+          for( rr in 1:Rh ){
             if( pc$h[[hh]]$n[[ii]][rr] > 0 ){
               iseffects = kk + 1:pc$h[[hh]]$n[[ii]][rr]
               pred_out$h[[hh]]$source_effects[[ii]][[rr]] =
-                tseffects[iseffects]
+                seffects[iseffects]
               kk = kk + pc$h[[hh]]$n[[ii]][rr]
             }
           }
@@ -531,15 +524,22 @@ predict = function(x, pc)
                               rep(pc$h[[hh]]$Path[[gg]][[rr]],
                                   each=nrow(Sigma_hr2[[rr]])))
           }
-          ic = pc$h[[hh]]$Omega_ic[[gg]][[rr]]
-          tpeffects = peffects[ic]
-          kk = 0
+          if( !is.null(pc$h[[hh]]$Omega_ic[[gg]][[rr]]) ){
+            ic = pc$h[[hh]]$Omega_ic[[gg]][[rr]]
+            tpeffects = peffects[ic]
+            kk = 0
+          }
           for( ii in pc$h[[hh]]$Source_Groups[[gg]] ){
             if( pc$h[[hh]]$n[[ii]][rr] > 0 ){
-              ipeffects = kk + 1:pc$h[[hh]]$n[[ii]][rr]
-              pred_out$h[[hh]]$path_effects[[ii]][[rr]] =
-                tpeffects[ipeffects]
-              kk = kk + pc$h[[hh]]$n[[ii]][rr]
+              if( is.null(pc$h[[hh]]$Omega_ic[[gg]][[rr]]) ){
+                pred_out$h[[hh]]$path_effects[[ii]][[rr]] =
+                  numeric(pc$h[[hh]]$n[[ii]][rr])
+              } else {
+                ipeffects = kk + 1:pc$h[[hh]]$n[[ii]][rr]
+                pred_out$h[[hh]]$path_effects[[ii]][[rr]] =
+                  tpeffects[ipeffects]
+                kk = kk + pc$h[[hh]]$n[[ii]][rr]
+              }
             }
           }
         }
