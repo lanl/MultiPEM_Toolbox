@@ -26,6 +26,14 @@ description of the statistical methodology and example application
 
 ./multipem-la-ur-23-21950.pdf
 
+Consult the article published in Geophysical Journal International
+that utilizes the same forward models, statistical error models, and
+observed signatures from this example application for illustration of
+yield estimation and uncertainty quantification in a nuclear forensics
+context:
+
+./ggag125.pdf
+
 Consult the user manual provided with this repository for descriptions
 of the input decks provided with the example application of this
 technical report (see ./Runfiles/IYDT-gsrp), and more generally
