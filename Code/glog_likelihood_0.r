@@ -69,10 +69,8 @@ gll_0 = function(x, pc)
       pm$dnotExp = pc$dnotExp
     }
     if( "llpars" %in% pnames ){
-      for( na in names(pc$h[[hh]]$llpars) ){
-        eval(parse(text=paste("pm$",na," = ","pc$h[[hh]]$llpars$",
-                              na,sep="")))
-      }
+      # Copy the named llpars fields into pm.
+      list2env(pc$h[[hh]]$llpars, envir=pm)
     }
 
     # extract forward model parameters for phenomenology "hh"
@@ -93,9 +91,10 @@ gll_0 = function(x, pc)
     n_h0_tot = sum(n_h0)
 
     # setup argument for forward model/jacobian call
+    # zeta0 is the parameter vector passed to the forward model and Jacobian.
     if( "itheta0" %in% pnames ){
-      Arg = "(x[pc$h[[hh]]$itheta0],pm)"
-    } else { Arg = "(x,pm)" }
+      zeta0 = x[pc$h[[hh]]$itheta0]
+    } else { zeta0 = x }
 
     # named parameters in forward model/jacobian call
     if( "theta0_names" %in% pnames ){
@@ -159,16 +158,17 @@ gll_0 = function(x, pc)
         }
 
         # calculate forward model
-        fcall = paste("pc$ffm$",pc$h[[hh]]$f0[rr],Arg,sep="")
-        yhat = eval(parse(text=fcall))
-        if( any(is.nan(yhat)) ){ return(NaN) }
+        yhat = pc$ffm[[pc$h[[hh]]$f0[rr]]](zeta0,pm)
+        # Return a full-length NaN gradient (length pc$ntheta0, the normal
+        # return length) so it stays conformable; corresponds to ll_0
+        # returning -Inf here.
+        if( any(is.nan(yhat)) ){ return(rep(NaN,pc$ntheta0)) }
 
         # calculate residual vector
         resid = c(resid,pc$h[[hh]]$Y0[[rr]] - yhat)
 
         # calculate components of Jacobian matrix
-        gcall = paste("pc$gfm$",pc$h[[hh]]$g0[rr],Arg,sep="")
-        jac = eval(parse(text=gcall)) 
+        jac = pc$gfm[[pc$h[[hh]]$g0[rr]]](zeta0,pm)
         Jac_th0 = rbind(Jac_th0,jac)
       }
     }

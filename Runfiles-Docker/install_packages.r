@@ -25,7 +25,5 @@ install.packages("adaptMCMC",dependencies=TRUE,
                  repos='http://cran.rstudio.com/')
 install.packages("FME",dependencies=TRUE,
                  repos='http://cran.rstudio.com/')
-install.packages("abind",dependencies=TRUE,
-                 repos='http://cran.rstudio.com/')
 install.packages("ramcmc",dependencies=TRUE,
                  repos='http://cran.rstudio.com/')

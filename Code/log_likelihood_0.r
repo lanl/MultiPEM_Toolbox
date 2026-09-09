@@ -46,10 +46,8 @@ ll_0 = function(x, pc)
       pm$notExp = pc$notExp
     }
     if( "llpars" %in% pnames ){
-      for( na in names(pc$h[[hh]]$llpars) ){
-        eval(parse(text=paste("pm$",na," = ","pc$h[[hh]]$llpars$",
-                              na,sep="")))
-      }
+      # Copy the named llpars fields into pm.
+      list2env(pc$h[[hh]]$llpars, envir=pm)
     }
 
     # extract forward model parameters for phenomenology "hh"
@@ -70,9 +68,10 @@ ll_0 = function(x, pc)
     n_h0_tot = sum(n_h0)
 
     # setup argument for forward model call
+    # zeta0 is the parameter vector passed to the forward model.
     if( "itheta0" %in% pnames ){
-      Arg = "(x[pc$h[[hh]]$itheta0],pm)"
-    } else { Arg = "(x,pm)" }
+      zeta0 = x[pc$h[[hh]]$itheta0]
+    } else { zeta0 = x }
 
     # named parameters in forward model call
     if( "theta0_names" %in% pnames ){
@@ -133,8 +132,7 @@ ll_0 = function(x, pc)
         }
 
         # calculate forward model
-        fcall = paste("pc$ffm$",pc$h[[hh]]$f0[rr],Arg,sep="")
-        yhat = eval(parse(text=fcall))
+        yhat = pc$ffm[[pc$h[[hh]]$f0[rr]]](zeta0,pm)
         if( any(is.nan(yhat)) ){ return(-Inf) }
 
         # calculate residual vector

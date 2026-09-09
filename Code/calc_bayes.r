@@ -625,11 +625,35 @@ calc_bayes = function(p_cal,gdir,adir,nst=10,nburn=10000,nmcmc=20000,
     # Hamiltonian Monte Carlo No-U-Turn (NUTS) sampling
     # parallel chains using R package "future"
     require(future)
-    # using R code from https://github.com/kasparmartens/NUTS
+    # adapted R code from https://github.com/kasparmartens/NUTS
     source(paste(gdir,"/helpers.r",sep=""),local=TRUE)
     source(paste(gdir,"/nuts.r",sep=""),local=TRUE)
+    # Compile/cache the C++ core with an explicit source path. helpers.r's
+    # auto-locate relies on sys.frame(1)$ofile, which is empty when sourced
+    # local=TRUE, so nuts_core.cpp cannot be found relative to gdir on the
+    # parallel workers otherwise.
+    compile_nuts_core(src=paste(gdir,"/nuts_core.cpp",sep=""))
+    # Fused log-posterior value+gradient. In NUTS each leapfrog leaf needs BOTH
+    # logp and grad at the same theta; the fused evaluator computes them in one
+    # pass (reusing chol(Omega)/resid_io), ~halving the per-leaf likelihood
+    # cost. make_llg_cal splices the live gradient source, so the fused gradient
+    # cannot drift from glog_likelihood_cal.r; if the anchors ever fail it
+    # returns NULL and we fall back to the separate lpost_full/glpost_full path.
+    source(paste(gdir,"/fused_likelihood_cal.r",sep=""),local=TRUE)
+    p_cal$llg_cal = make_llg_cal(gdir)
+    use_fused = !is.null(p_cal$llg_cal)
+    if( use_fused ){
+      p_cal$llg_full = llg_full
+      p_cal$lpg_full = lpg_full
+      lpg = function(x) p_cal$lpg_full(x, p_cal)   # list(logp=, grad=)
+    } else {
+      warning(paste("calc_bayes: fused likelihood unavailable ",
+                    "(gll_cal structure changed?); using non-fused NUTS path.",
+                    sep=""))
+      lpg = NULL
+    }
     if( ncor_mc == 1 ){ pl = "sequential"; plan(pl);
-    } else { 
+    } else {
       if( pl != "sequential" ){ plan(pl,workers=ncor_mc)
       } else { plan(pl) }
     }
@@ -645,22 +669,67 @@ calc_bayes = function(p_cal,gdir,adir,nst=10,nburn=10000,nmcmc=20000,
       stop("Gradient of log-posterior must be provided.")
     }
     ptm = proc.time()
-    fham = lapply(1:ncor_mc, function(qq) { future(NUTS(xi[qq,],
-                             f=lpost_full,grad_f=glpost_full,
-                             n_iter=nburn+round(nmcmc/ncor_mc),
-                             delta=0.8,verbose=FALSE),
-                             seed=si[qq]) })
+    if( use_fused ){
+      # Fused single-callback path (one logp+grad evaluation per leaf).
+      fham = lapply(1:ncor_mc, function(qq) { future(NUTS(xi[qq,],
+                               fg=lpg,
+                               n_iter=nburn+round(nmcmc/ncor_mc),
+                               warmup=nburn,
+                               diagnostics=TRUE,verbose=FALSE),
+                               seed=si[qq]) })
+    } else {
+      # Fallback: separate log-posterior value and gradient callbacks.
+      fham = lapply(1:ncor_mc, function(qq) { future(NUTS(xi[qq,],
+                               f=lpost_full,grad_f=glpost_full,
+                               n_iter=nburn+round(nmcmc/ncor_mc),
+                               warmup=nburn,
+                               diagnostics=TRUE,verbose=FALSE),
+                               seed=si[qq]) })
+    }
     ham = lapply(fham, value)
     plan(sequential)
     print("Run time:")
     print(proc.time() - ptm)
     cat("\n")
+    # acceptance rate
+    print("ACCEPTANCE RATES:")
+    cat("\n")
+    for( qq in 1:ncor_mc ){
+      print(paste("Core ",qq,": ",ham[[qq]]$mean_accept,sep=""))
+    }
+    cat("\n")
+    # divergent transitions (post-warmup): a healthy run has ~0. Nonzero
+    # counts flag posterior geometry the sampler could not explore reliably.
+    # max_treedepth hits (default 10) indicate the sampler is terminating
+    # trajectories early (efficiency loss, not bias).
+    print("DIVERGENCES:")
+    cat("\n")
+    ndiv_tot = 0; npost_tot = 0; nmaxtd_tot = 0
+    for( qq in 1:ncor_mc ){
+      dg = ham[[qq]]$diagnostics
+      dg = dg[!dg$warmup,]
+      npost = nrow(dg)
+      ndiv = sum(dg$divergent)
+      nmaxtd = sum(dg$tree_depth >= 10)
+      ndiv_tot = ndiv_tot + ndiv
+      npost_tot = npost_tot + npost
+      nmaxtd_tot = nmaxtd_tot + nmaxtd
+      print(paste("Core ",qq,": ",ndiv,"/",npost," divergent (",
+                  round(100*ndiv/npost,2),"%), ",nmaxtd,
+                  " max-treedepth hits",sep=""))
+    }
+    cat("\n")
+    print(paste("TOTAL divergent: ",ndiv_tot,"/",npost_tot," (",
+                round(100*ndiv_tot/npost_tot,2),"%); TOTAL max-treedepth hits: ",
+                nmaxtd_tot,sep=""))
+    cat("\n")
     # extract post-burnin posterior samples
     mpi = NULL
     for (qq in 1:ncor_mc){
-      tmpi = ham[[qq]]
-      mpi = rbind(mpi, as.matrix(tmpi[-(1:nburn),]))
+      tmpi = ham[[qq]]$theta
+      mpi = rbind(mpi,tmpi)
     }
+    if (is.vector(mpi)) { mpi = matrix(mpi,ncol=1) }
   }
 
   # Print posterior summary statistics

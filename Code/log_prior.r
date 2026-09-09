@@ -80,20 +80,16 @@ lprior = function(x, pc)
       theta0 = pc$transform(theta0, pc=pc)
     }
     if( "lp_theta0" %in% names(pc) ){
-      Arg = "(theta0,pc)"
-      lp_theta0_call = paste("pc$flp$",pc$lp_theta0$f,Arg,sep="")
       # evaluate log-prior for new event inference parameters
-      lp = lp + eval(parse(text=lp_theta0_call))
+      lp = lp + pc$flp[[pc$lp_theta0$f]](theta0,pc)
     }
     x = x[-(1:pc$ntheta0)]
   }
   if( pc$ncalp > 0 ){
     calp = x[1:pc$ncalp]
     if( "lp_calp" %in% names(pc) ){
-      Arg = "(calp,pc)"
-      lp_calp_call = paste("pc$flp$",pc$lp_calp$f,Arg,sep="")
       # evaluate log-prior for calibration inference parameters
-      lp = lp + eval(parse(text=lp_calp_call))
+      lp = lp + pc$flp[[pc$lp_calp$f]](calp,pc)
     }
     x = x[-(1:pc$ncalp)]
   }
@@ -213,11 +209,8 @@ lprior = function(x, pc)
             st_beta = sum(pc$h[[hh]]$pbeta[1:(rr-1)])
           }
           betar = beta[st_beta+(1:pc$h[[hh]]$pbeta[rr])]
-          Arg = "(betar,pc)"
-          lp_beta_call = paste("pc$flp$",pc$h[[hh]]$lp_beta$f[rr],
-                               Arg,sep="")
           # evaluate log-prior for common model parameters
-          lp = lp + eval(parse(text=lp_beta_call))
+          lp = lp + pc$flp[[pc$h[[hh]]$lp_beta$f[rr]]](betar,pc)
         }
       }
       if( ptbeta > 0 ){
@@ -231,13 +224,9 @@ lprior = function(x, pc)
               }
               betatr = betat[[tt]][st_betatr+
                                    (1:pc$h[[hh]]$pbetat[[tt]][rr])]
-              Arg = "(betatr,pc)"
-              lp_betat_call = paste("pc$flp$",
-                                    pc$h[[hh]]$lp_betat[[tt]]$f[rr],
-                                    Arg,sep="")
               # evaluate log-prior for emplacement condition
               # dependent parameters
-              lp = lp + eval(parse(text=lp_betat_call))
+              lp = lp + pc$flp[[pc$h[[hh]]$lp_betat[[tt]]$f[rr]]](betatr,pc)
             }
           }
         }
@@ -292,9 +281,14 @@ lprior = function(x, pc)
     # Lewandowski-Kurowicka-Joe (LKJ) prior
     eta = pc$lp_corr$eta
     lp = lp + (eta - 1)*ldetC_h
-    lp = lp + sum((2*eta-2+Rh-1:(Rh-1))*(Rh-1:(Rh-1)))*log(2)+
-         sum((Rh-1:(Rh-1))*lbeta(eta+(Rh-1:(Rh-1)-1)/2,
-             eta+(Rh-1:(Rh-1)-1)/2))
+    # LKJ normalizing constant, defined only for Rh>1 (a single response has no
+    # correlations). The Rh-1:(Rh-1) index sequence is valid only for Rh>=2, so
+    # the term is guarded; Rh==1 contributes nothing.
+    if( Rh > 1 ){
+      lp = lp + sum((2*eta-2+Rh-1:(Rh-1))*(Rh-1:(Rh-1)))*log(2)+
+           sum((Rh-1:(Rh-1))*lbeta(eta+(Rh-1:(Rh-1)-1)/2,
+               eta+(Rh-1:(Rh-1)-1)/2))
+    }
     # jacobian
     ncpar = Rh*(Rh+1)/2
     Jac_c = Matrix(0,ncpar,ncpar,sparse=FALSE,doDiag=FALSE)

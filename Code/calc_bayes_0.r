@@ -560,9 +560,35 @@ calc_bayes_0 = function(p_cal,gdir,adir,nst=10,nburn=10000,nmcmc=20000,
     # Hamiltonian Monte Carlo No-U-Turn (NUTS) sampling
     # parallel chains using R package "future"
     require(doFuture)
-    # using R code from https://github.com/kasparmartens/NUTS
+    # adapted R code from https://github.com/kasparmartens/NUTS
     source(paste(gdir,"/helpers.r",sep=""),local=TRUE)
     source(paste(gdir,"/nuts.r",sep=""),local=TRUE)
+    # Compile/cache the C++ core with an explicit source path. helpers.r's
+    # auto-locate relies on sys.frame(1)$ofile, which is empty when sourced
+    # local=TRUE, so nuts_core.cpp cannot be found relative to gdir on the
+    # parallel workers otherwise.
+    compile_nuts_core(src=paste(gdir,"/nuts_core.cpp",sep=""))
+    # Fused log-posterior value+gradient for the new-event ("_0") stack. In
+    # NUTS each leapfrog leaf needs BOTH logp and grad at the same theta; the
+    # fused evaluator computes them in one pass (reusing the residuals and the
+    # fixed IOmega), avoiding the duplicate forward-model + residual pass.
+    # make_llg_0 splices the live glog_likelihood_0.r source, so the fused
+    # gradient cannot drift from it; if the anchors ever fail it returns NULL
+    # and we fall back to the separate lpost_0/glpost_0 path. Attaching llg_0/
+    # lpg_0 to p_cal makes them propagate into each per-imputation q_cal via
+    # pc_0() below.
+    source(paste(gdir,"/fused_likelihood_0.r",sep=""),local=TRUE)
+    p_cal$llg_0 = make_llg_0(gdir)
+    use_fused = !is.null(p_cal$llg_0)
+    if( use_fused ){
+      p_cal$lpg_0 = lpg_0
+      lpg = function(x) p_cal$lpg_0(x, p_cal)   # list(logp=, grad=)
+    } else {
+      warning(paste("calc_bayes_0: fused likelihood unavailable ",
+                    "(gll_0 structure changed?); using non-fused NUTS path.",
+                    sep=""))
+      lpg = NULL
+    }
     if( ncor_mc == 1 ){ pl = "sequential"; plan(pl);
     } else {
       if( ncor_mc > nimp && nimp > 1 ){ ncor_mc = nimp }
@@ -582,22 +608,67 @@ calc_bayes_0 = function(p_cal,gdir,adir,nst=10,nburn=10000,nmcmc=20000,
         stop("Gradient of log-posterior must be provided.")
       }
       ptm = proc.time()
-      fham = lapply(1:ncor_mc, function(qq) { future(NUTS(xi[qq,],
-                               f=lpost_0,grad_f=glpost_0,
-                               n_iter=nburn+round(nmcmc/ncor_mc),
-                               delta=0.8,verbose=FALSE),
-                               seed=si[qq]) })
+      if( use_fused ){
+        # Fused single-callback path (one logp+grad evaluation per leaf).
+        fham = lapply(1:ncor_mc, function(qq) { future(NUTS(xi[qq,],
+                                 fg=lpg,
+                                 n_iter=nburn+round(nmcmc/ncor_mc),
+                                 warmup=nburn,
+                                 diagnostics=TRUE,verbose=FALSE),
+                                 seed=si[qq]) })
+      } else {
+        # Fallback: separate log-posterior value and gradient callbacks.
+        fham = lapply(1:ncor_mc, function(qq) { future(NUTS(xi[qq,],
+                                 f=lpost_0,grad_f=glpost_0,
+                                 n_iter=nburn+round(nmcmc/ncor_mc),
+                                 warmup=nburn,
+                                 diagnostics=TRUE,verbose=FALSE),
+                                 seed=si[qq]) })
+      }
       ham = lapply(fham, value)
       plan(sequential)
       print("Run time:")
       print(proc.time() - ptm)
       cat("\n")
+      # acceptance rate
+      print("ACCEPTANCE RATES:")
+      cat("\n")
+      for( qq in 1:ncor_mc ){
+        print(paste("Core ",qq,": ",ham[[qq]]$mean_accept,sep=""))
+      }
+      cat("\n")
+      # divergent transitions (post-warmup): a healthy run has ~0. Nonzero
+      # counts flag posterior geometry the sampler could not explore
+      # reliably. max_treedepth hits (default 10) indicate the sampler is
+      # terminating trajectories early (efficiency loss, not bias).
+      print("DIVERGENCES:")
+      cat("\n")
+      ndiv_tot = 0; npost_tot = 0; nmaxtd_tot = 0
+      for( qq in 1:ncor_mc ){
+        dg = ham[[qq]]$diagnostics
+        dg = dg[!dg$warmup,]
+        npost = nrow(dg)
+        ndiv = sum(dg$divergent)
+        nmaxtd = sum(dg$tree_depth >= 10)
+        ndiv_tot = ndiv_tot + ndiv
+        npost_tot = npost_tot + npost
+        nmaxtd_tot = nmaxtd_tot + nmaxtd
+        print(paste("Core ",qq,": ",ndiv,"/",npost," divergent (",
+                    round(100*ndiv/npost,2),"%), ",nmaxtd,
+                    " max-treedepth hits",sep=""))
+      }
+      cat("\n")
+      print(paste("TOTAL divergent: ",ndiv_tot,"/",npost_tot," (",
+                  round(100*ndiv_tot/npost_tot,2),
+                  "%); TOTAL max-treedepth hits: ",nmaxtd_tot,sep=""))
+      cat("\n")
       # extract post-burnin posterior samples
       mpi = NULL
       for (qq in 1:ncor_mc){
-        tmpi = ham[[qq]]
-        mpi = rbind(mpi, as.matrix(tmpi[-(1:nburn),]))
+        tmpi = ham[[qq]]$theta
+        mpi = rbind(mpi,tmpi)
       }
+      if (is.vector(mpi)) { mpi = matrix(mpi,ncol=1) }
     } else {
       xi = NULL
       eps = 0.001
@@ -611,20 +682,56 @@ calc_bayes_0 = function(p_cal,gdir,adir,nst=10,nburn=10000,nmcmc=20000,
       fham = foreach( qq = 1:nimp ) %dofuture% {
                q_cal = p_cal$pc_0(p_cal$mpi[qq,], p_cal)
                q_cal$niter = nburn+nmcmc
+               q_cal$warmup = nburn
                q_cal$lpost_0 = lpost_0
                q_cal$glpost_0 = glpost_0
+               # q_cal inherits llg_0/lpg_0 from p_cal via pc_0(); nuts_imp
+               # uses the fused single-callback path when they are present.
                nuts_imp(xi[qq,],q_cal)
              } %seed% TRUE
       plan(sequential)
       print("Run time:")
       print(proc.time() - ptm)
       cat("\n")
+      # acceptance rate
+      print("ACCEPTANCE RATES:")
+      cat("\n")
+      for( qq in 1:nimp ){
+        print(paste("Imputation ",qq,": ",fham[[qq]]$mean_accept,
+                    sep=""))
+      }
+      cat("\n")
+      # divergent transitions (post-warmup): a healthy run has ~0. Nonzero
+      # counts flag posterior geometry the sampler could not explore
+      # reliably. max_treedepth hits (default 10) indicate the sampler is
+      # terminating trajectories early (efficiency loss, not bias). Counts
+      # use the full (unthinned) post-warmup trajectory diagnostics.
+      print("DIVERGENCES:")
+      cat("\n")
+      ndiv_tot = 0; npost_tot = 0; nmaxtd_tot = 0
+      for( qq in 1:nimp ){
+        dg = fham[[qq]]$diagnostics
+        dg = dg[!dg$warmup,]
+        npost = nrow(dg)
+        ndiv = sum(dg$divergent)
+        nmaxtd = sum(dg$tree_depth >= 10)
+        ndiv_tot = ndiv_tot + ndiv
+        npost_tot = npost_tot + npost
+        nmaxtd_tot = nmaxtd_tot + nmaxtd
+        print(paste("Imputation ",qq,": ",ndiv,"/",npost," divergent (",
+                    round(100*ndiv/npost,2),"%), ",nmaxtd,
+                    " max-treedepth hits",sep=""))
+      }
+      cat("\n")
+      print(paste("TOTAL divergent: ",ndiv_tot,"/",npost_tot," (",
+                  round(100*ndiv_tot/npost_tot,2),
+                  "%); TOTAL max-treedepth hits: ",nmaxtd_tot,sep=""))
+      cat("\n")
       # extract post-burnin posterior samples
       mpi = NULL
       ipi = seq(1,nmcmc,by=nthin)
       for (qq in 1:nimp){
-        tmpi = fham[[qq]]
-        tmpi = as.matrix(tmpi[-(1:nburn),])
+        tmpi = as.matrix(fham[[qq]]$theta)
         # thin posterior samples
         tmpi = tmpi[ipi,,drop=FALSE]
         mpi = rbind(mpi,tmpi)
@@ -670,7 +777,7 @@ calc_bayes_0 = function(p_cal,gdir,adir,nst=10,nburn=10000,nmcmc=20000,
     fsmc = foreach( qq = 1:nimp ) %dofuture% {
              if( nimp == 1 ){ q_cal = p_cal
              } else { q_cal = p_cal$pc_0(p_cal$mpi[qq,], p_cal) }
-             SMC(N=nmcmc,M=100,nuseq_T=1,range=cbind(slb,sub),
+             SMC(N=nmcmc,M=10,nuseq_T=1,range=cbind(slb,sub),
                  pc=q_cal)
            } %seed% TRUE
     plan(sequential)
@@ -688,7 +795,7 @@ calc_bayes_0 = function(p_cal,gdir,adir,nst=10,nburn=10000,nmcmc=20000,
     mpi = NULL
     ipi = seq(1,nmcmc,by=nthin)
     for (qq in 1:nimp){
-      tmpi = fsmc[[qq]]$sample
+      tmpi = as.matrix(fsmc[[qq]]$sample)
       # thin posterior samples
       tmpi = tmpi[ipi,,drop=FALSE]
       mpi = rbind(mpi,tmpi)
@@ -788,6 +895,15 @@ lpo_opt = function(xst,bfgs,pc,tc)
 
 nuts_imp = function(xi,p_cal)
 {
-  NUTS(xi,f=p_cal$lpost_0,grad_f=p_cal$glpost_0,n_iter=p_cal$niter,
-       delta=0.8,verbose=FALSE)
+  # Use the fused single-callback log-posterior value+gradient evaluator when
+  # available (attached to p_cal as lpg_0); otherwise fall back to the separate
+  # value/gradient callbacks. Bitwise-identical draws either way.
+  if( !is.null(p_cal$lpg_0) ){
+    lpg = function(x) p_cal$lpg_0(x, p_cal)
+    NUTS(xi,fg=lpg,n_iter=p_cal$niter,
+         warmup=p_cal$warmup,diagnostics=TRUE,verbose=FALSE)
+  } else {
+    NUTS(xi,f=p_cal$lpost_0,grad_f=p_cal$glpost_0,n_iter=p_cal$niter,
+         warmup=p_cal$warmup,diagnostics=TRUE,verbose=FALSE)
+  }
 }

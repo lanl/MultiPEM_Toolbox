@@ -48,6 +48,19 @@ implemented in this repository (see ./Runfiles/IYDT-gsrp):
 
 ./MultiPEM-GSRP-030425.pdf
 
+The user must ensure that the following R packages are installed in
+their R environment prior to running the code in this repository:
+
+- Matrix
+- numDeriv
+- doFuture
+- adaptMCMC
+- FME
+- ramcmc (optional for SMC sampling)
+
+The command for installing R packages can be found in the user manual
+or in the file ./Runfiles-Docker/install_packages.r 
+
 Directories in this repository:
 
 Applications/

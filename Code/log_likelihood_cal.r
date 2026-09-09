@@ -86,10 +86,8 @@ ll_cal = function(x, pc)
       pm$notExp = pc$notExp
     }
     if( "llpars" %in% pnames ){
-      for( na in names(pc$h[[hh]]$llpars) ){
-        eval(parse(text=paste("pm$",na," = ","pc$h[[hh]]$llpars$",
-                              na,sep="")))
-      }
+      # Copy the named llpars fields (yield_scaling, etc.) into pm.
+      list2env(pc$h[[hh]]$llpars, envir=pm)
     }
 
     # extract forward model parameters for phenomenology "hh"
@@ -164,18 +162,23 @@ ll_cal = function(x, pc)
         n_hi_tot = sum(n_hi)
 
         # setup argument for forward model call
-        Arg = "(c(beta_t"
+        # Record which extra argument pieces the forward model needs. At the
+        # call site the argument vector is assembled with c(...) in this exact
+        # order: c(beta_t [,Cp] [,W] [,theta0]). This block also sets the pm
+        # side-effects the forward model reads (pm$cal, pm$theta_names, and
+        # rm(theta_names) when the source has no eiv).
+        use_Cp = FALSE; use_W = FALSE; use_theta0 = 0L  # 0 none,1 sub,2 full
         if( exists("cal_par_names",where=pm,inherits=FALSE) ){
           if( !("nev" %in% pnames) || !pc$h[[hh]]$nev[ii] ){
             pm$cal = TRUE
-            Arg = paste(Arg,",Cp",sep="")
+            use_Cp = TRUE
           } else { pm$cal = FALSE }
         }
         if( "eiv" %in% pnames ){
           if( !is.null(pc$h[[hh]]$eiv[[ii]]) ){
             W = w_eiv[pc$h[[hh]]$eiv[[ii]]]
             pm$theta_names = "W"
-            Arg = paste(Arg,",W",sep="")
+            use_W = TRUE
           } else {
             if( exists("theta_names",where=pm,inherits=FALSE) ){
               rm(theta_names, envir=pm)
@@ -183,11 +186,9 @@ ll_cal = function(x, pc)
           }
         }
         if( "nev" %in% pnames && pc$h[[hh]]$nev[ii] ){
-          if( "itheta0" %in% pnames ){
-            Arg = paste(Arg,",theta0[pc$h[[hh]]$itheta0]",sep="")
-          } else { Arg = paste(Arg,",theta0",sep="") }
+          if( "itheta0" %in% pnames ){ use_theta0 = 1L
+          } else { use_theta0 = 2L }
         }
-        Arg=paste(Arg,"),pm)",sep="")
 
         # named parameters in forward model call
         if( "theta_names" %in% pnames &&
@@ -252,8 +253,14 @@ ll_cal = function(x, pc)
             }
 
             # calculate forward model
-            fcall = paste("pc$ffm$",pc$h[[hh]]$f[rr],Arg,sep="")
-            yhat = eval(parse(text=fcall))
+            # Assemble the argument vector c(beta_t [,Cp] [,W] [,theta0...])
+            # and call the forward model.
+            zeta = beta_t
+            if( use_Cp ){ zeta = c(zeta,Cp) }
+            if( use_W ){ zeta = c(zeta,W) }
+            if( use_theta0 == 1L ){ zeta = c(zeta,theta0[pc$h[[hh]]$itheta0])
+            } else if( use_theta0 == 2L ){ zeta = c(zeta,theta0) }
+            yhat = pc$ffm[[pc$h[[hh]]$f[rr]]](zeta,pm)
             if( any(is.nan(yhat)) ){ return(-Inf) }
 
             # calculate residual vector
@@ -274,8 +281,10 @@ ll_cal = function(x, pc)
         }
 
         # calculate model covariance matrix
-        Omega[[sc]] = Matrix(0,n_hi_tot,n_hi_tot,sparse=FALSE,
-                             doDiag=FALSE)
+        # Build the small per-source dense blocks as base R matrices; the
+        # assembled Omega is converted to a base matrix and factored with base
+        # chol()/backsolve() below, keeping the linear algebra in base R.
+        Omega[[sc]] = matrix(0,n_hi_tot,n_hi_tot)
         for( r1 in 1:Rh ){
           if( n_hi[r1] > 0 ){
             st_nir1 = 0
@@ -286,8 +295,7 @@ ll_cal = function(x, pc)
                 st_nir2 = 0
                 if( r2 > 1 ){ st_nir2 = sum(n_hi[1:(r2-1)]) }
                 ic = st_nir2+(1:n_hi[r2])
-                Sigma_hi = Matrix(0,n_hi[r1],n_hi[r2],sparse=FALSE,
-                                  doDiag=FALSE)
+                Sigma_hi = matrix(0,n_hi[r1],n_hi[r2])
                 Sigma_hi[pc$h[[hh]]$i[[ii]]$cov_pairs[[r1]][[r2]]] =
                   Sigma_h[r1,r2]
                 Omega[[sc]][ir,ic] = Sigma_hi
@@ -316,14 +324,21 @@ ll_cal = function(x, pc)
         }
       }
       if( any(is.infinite(Omega)) ){ return(-Inf) }
+      # Factor and solve with base R (dense). as.matrix() converts the assembled
+      # Omega; base chol() returns a plain upper-triangular matrix (hence the
+      # is.matrix() check). The quadratic form uses a triangular backsolve
+      # (t(cOmega) z = resid => resid' Omega^{-1} resid = sum(z^2)), which needs
+      # no explicit inverse.
+      Omega = as.matrix(Omega)
       cOmegaCatch = pc$tryCatch.W.E(chol(Omega))
-      if( is(cOmegaCatch$value,"Matrix") ){ cOmega = cOmegaCatch$value
+      if( is.matrix(cOmegaCatch$value) ){ cOmega = cOmegaCatch$value
       } else { return(-Inf) }
       if( kappa(cOmega) > 1000 ){ return(-Inf) }
 
       # calculate components of log-likelihood function
+      z = backsolve(cOmega, resid, transpose=TRUE)
       ll = ll - sum(log(diag(cOmega)))
-      ll = ll - t(resid) %*% chol2inv(cOmega) %*% resid/2
+      ll = ll - sum(z^2)/2
       ll = ll - n_Omega*log(2*pi)/2
     }
   }

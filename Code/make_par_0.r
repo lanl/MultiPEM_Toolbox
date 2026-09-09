@@ -186,7 +186,10 @@ pc_0 = function(xfin, pc)
      stop("Cholesky factor of Omega is ill-conditioned.")
     }
     pc$h[[hh]]$logdet_cOmega = sum(log(diag(cOmega)))
-    pc$h[[hh]]$IOmega = chol2inv(cOmega)
+    # Store IOmega as a plain (dense) base R matrix. ll_0/gll_0 use it in
+    # t(resid) %*% IOmega %*% resid and t(Jac) %*% IOmega %*% resid on every
+    # call, so keeping it as a base matrix keeps that linear algebra in base R.
+    pc$h[[hh]]$IOmega = as.matrix(chol2inv(cOmega))
   }
   return(pc)
 }

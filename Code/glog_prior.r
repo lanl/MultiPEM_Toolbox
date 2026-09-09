@@ -100,10 +100,8 @@ glprior = function(x, pc)
       theta0 = pc$transform(theta0, pc=pc)
     }
     if( "lp_theta0" %in% names(pc) ){
-      Arg = "(theta0,pc)"
-      glp_theta0_call = paste("pc$glp$",pc$lp_theta0$g,Arg,sep="")
       # evaluate gradient for new event inference parameters
-      g_th0 = eval(parse(text=glp_theta0_call))
+      g_th0 = pc$glp[[pc$lp_theta0$g]](theta0,pc)
       if( exists("itheta0_bounds",where=pc,inherits=FALSE) ){
         g_th0 = g_th0 * dtheta0_b
       }
@@ -118,10 +116,8 @@ glprior = function(x, pc)
     calp = x[1:pc$ncalp]
     gr_cp = numeric(pc$ncalp)
     if( "lp_calp" %in% names(pc) ){
-      Arg = "(calp,pc)"
-      glp_calp_call = paste("pc$glp$",pc$lp_calp$g,Arg,sep="")
       # evaluate gradient for calibration inference parameters
-      gr_cp = eval(parse(text=glp_calp_call))
+      gr_cp = pc$glp[[pc$lp_calp$g]](calp,pc)
     }
     x = x[-(1:pc$ncalp)]
   } else { gr_cp = NULL }
@@ -258,11 +254,8 @@ glprior = function(x, pc)
             st_beta = sum(pc$h[[hh]]$pbeta[1:(rr-1)])
           }
           betar = beta[st_beta+(1:pc$h[[hh]]$pbeta[rr])]
-          Arg = "(betar,pc)"
-          glp_beta_call = paste("pc$glp$",pc$h[[hh]]$lp_beta$g[rr],
-                                Arg,sep="")
           # evaluate gradient for common model parameters
-          gr_beta0 = c(gr_beta0,eval(parse(text=glp_beta_call)))
+          gr_beta0 = c(gr_beta0,pc$glp[[pc$h[[hh]]$lp_beta$g[rr]]](betar,pc))
         } else { gr_beta0 = c(gr_beta0,numeric(pc$h[[hh]]$pbeta[rr])) }
       }
       if( ptbeta > 0 ){
@@ -276,14 +269,10 @@ glprior = function(x, pc)
               }
               betatr = betat[[tt]][st_betatr+
                                    (1:pc$h[[hh]]$pbetat[[tt]][rr])]
-              Arg = "(betatr,pc)"
-              glp_betat_call = paste("pc$glp$",
-                                     pc$h[[hh]]$lp_betat[[tt]]$g[rr],
-                                     Arg,sep="")
               # evaluate gradient for emplacement condition
               # dependent parameters
               g_betat[[tt]] = c(g_betat[[tt]],
-                                eval(parse(text=glp_betat_call)))
+                                pc$glp[[pc$h[[hh]]$lp_betat[[tt]]$g[rr]]](betatr,pc))
             } else {
               g_betat[[tt]] = c(g_betat[[tt]],
                                 numeric(pc$h[[hh]]$pbetat[[tt]][rr]))
