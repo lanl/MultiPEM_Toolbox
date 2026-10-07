@@ -1,34 +1,132 @@
-This directory will contain subdirectories for each application.
-Each analysis for a given application will be designated by
-individual subdirectories within the associated application
-directory. Each analysis directory will contain a "runMPEM.r"
-file that provides the R code that is to be run for that analysis.
+# Canonical analysis run files
 
-A symbolic link to the application independent code needed for
-each analysis should be placed in this directory as follows:
+`Runfiles` contains the input decks for every supplied MultiPEM analysis. Each
+leaf analysis directory contains `runMPEM.r`, `runMPEM_0.r`, or both:
 
-% ln -s ../Code/ Code
+- `runMPEM.r` performs rapid calibration or a complete joint assessment.
+- `runMPEM_0.r` performs rapid new-event inference from a saved calibration
+  workspace.
 
-The Code/ directory contains functions utilized across
-applications, such as the log-likelihood, log-prior, and log-
-posterior distributions and their associated gradients.
+Read the README in the selected application and phenomenology directory before
+running a deck. It records data choices, model variants, prerequisites, and
+required optimization inputs.
 
-Analyses can be run by:
-1) cutting and pasting from "runMPEM.r" into an interactive R
-   session
-2) starting an R session and running, e.g.
+## Directory contract
 
-> source("runMPEM.r")
+Canonical decks assume this relative layout:
 
-3) running in batch mode from the command line, e.g.
+```text
+MultiPEM_Toolbox/
+    Applications/
+    Code/
+    Runfiles/
+        Code -> ../Code
+        APPLICATION/
+            Code -> ../../Applications/Code/APPLICATION_CODE
+            Data -> ../../Applications/Data/APPLICATION_DATA
+            PHENOMENOLOGY/ANALYSIS/runMPEM*.r
+```
 
-% R CMD BATCH runMPEM.r runMPEM.out &
+The symbolic links are needed only for native runs. The Docker launcher copies
+the required directories into each private job snapshot.
 
-or
+Create the shared native link once from `Runfiles`:
 
-% nohup R CMD BATCH runMPEM.r runMPEM.out & disown
+```text
+ln -s ../Code Code
+```
 
-for longer jobs when the user must log off the machine.
+Then create the application links shown in its README. Some phenomenology
+directories also need a local `Code` link to prior functions.
 
-NOTE: #2 and #3 assume Mac/Linux OS; if running in Windows
-one can presumably find instructions online.
+## Native execution
+
+From an analysis directory, run the first or only stage with:
+
+```text
+R CMD BATCH runMPEM.r runMPEM.out &
+```
+
+The trailing `&` runs the batch job in the background. For rapid analyses,
+follow `runMPEM.out` and verify that it ends with `proc.time()` output and that
+`.RData` exists. Then preserve a pristine calibration workspace before
+starting any event stage:
+
+```text
+cp .RData .RData-calibration
+```
+
+Only after that copy is secure should you start the event stage:
+
+```text
+R CMD BATCH runMPEM_0.r runMPEM_0.out &
+```
+
+Use `tail runMPEM.out` or `tail runMPEM_0.out` to follow a background run. An
+interactive alternative is `source("runMPEM.r")` from the analysis directory.
+
+The event deck modifies and saves its working `.RData`. Retain
+`.RData-calibration` even if only one event is currently planned: it is the
+reusable benchmark/calibration result for future event analyses. Copy a fresh
+instance to `.RData` in each event working directory.
+
+## Optimization inputs
+
+Multi-phenomenology calibration decks can use single-phenomenology MLE results
+as starting values. Their `opt_files_in` values point to exact filenames under
+a sibling `Opt` directory. On a clean checkout the directory does not exist.
+Create it and copy every required file exactly as documented locally before
+starting the MultiPEM deck.
+
+These files are required by decks that hard-code `opt_files_in`; the calculation
+calls `readRDS` and will fail when one is absent. Do not interpret the historical
+phrase “more informed starting value” as optional for such a shipped deck unless
+you also edit the deck to use `NULL` or supply `Xst` deliberately.
+
+## Docker execution
+
+From `../Runfiles-Docker`:
+
+```text
+Rscript mpem.R doctor
+Rscript mpem.R list
+Rscript mpem.R run APPLICATION/PHENOMENOLOGY/ANALYSIS
+```
+
+Docker creates a private copy of the entire registered application. Outputs
+therefore remain under the printed results directory rather than appearing in
+canonical `Runfiles`.
+
+If a later MultiPEM job needs `opt.RData` from earlier single-phenomenology
+jobs, copy those files from
+`RESULTS/work/APPLICATION/PHENOMENOLOGY/ANALYSIS/opt.RData` into the canonical
+`Runfiles/APPLICATION/MULTIPEM/Opt` destinations first. Create the MultiPEM job
+only after staging all inputs so its snapshot contains them. See
+`../Runfiles-Docker/README` for the complete lifecycle and checkpoint workflow.
+
+## Outputs
+
+Depending on deck settings, an analysis directory can receive:
+
+- `.RData`, the saved workspace;
+- `runMPEM.out` or `runMPEM_0.out`, the batch transcript;
+- `opt.RData` or `opt_nev.RData`, optimization results; and
+- sampler- or application-specific summaries printed into the transcript.
+
+Do not commit generated output as canonical input unless a documented workflow
+explicitly calls for a retained fixture. Docker jobs additionally record input
+hashes, stage status, CPU adjustments, and a durable combined log.
+
+## Adding an analysis
+
+1. Create `Runfiles/APPLICATION/PHENOMENOLOGY/ANALYSIS`.
+2. Add at least one deck named `runMPEM.r` or `runMPEM_0.r`.
+3. Keep data and code paths relative to that analysis directory.
+4. Use the standard `ncores_*` variables and matching `ncor*` arguments so the
+   Docker snapshot can guard worker pools.
+5. Register a new application in `../Runfiles-Docker/applications.tsv`; analyses
+   beneath an existing registered application are discovered automatically.
+6. Run `Rscript mpem.R doctor` and `Rscript mpem.R list`, then test the new deck
+   in a new results directory.
+
+The repository README lists native packages and reproducibility guidance.

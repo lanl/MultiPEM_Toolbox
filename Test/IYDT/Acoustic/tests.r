@@ -26,6 +26,7 @@ source(paste(adir,"/jacobian_0.r",sep=""),local=TRUE)
 
 # directory to test files
 tdir = "../Test"
+source(paste(tdir,"/test_helpers.r",sep=""),local=TRUE)
 
 print("***** test_rom_a1_d.r *****")
 cat("\n")

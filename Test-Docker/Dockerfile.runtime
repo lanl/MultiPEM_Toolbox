@@ -1,0 +1,21 @@
+# This digest fixes the R version, compiler toolchain, and system libraries
+# used by the test calculations.
+FROM rocker/r-base:4.4.3@sha256:be091b05f241e2c6c76080a182cbdb15084af214fd5a56df0e8589abc407b7bd
+
+ENV RENV_CONFIG_AUTOLOADER_ENABLED=FALSE \
+    RENV_CONFIG_CACHE_ENABLED=FALSE
+
+# Restore dependencies before copying runner files so ordinary runner changes
+# continue to reuse the expensive package layer.
+COPY Test-Docker/renv.lock /opt/testmpem/renv.lock
+RUN Rscript -e 'options(repos = c(CRAN = "http://cran.rstudio.com")); install.packages("renv", dependencies = c("Depends", "Imports", "LinkingTo")); renv::restore(project = "/opt/testmpem", library = "/usr/local/lib/R/site-library", lockfile = "/opt/testmpem/renv.lock", prompt = FALSE)' \
+    && Rscript -e 'required <- c("Matrix", "numDeriv", "doFuture", "future", "iterators", "adaptMCMC", "FME", "ramcmc", "Rcpp", "RcppEigen"); stopifnot(all(vapply(required, requireNamespace, logical(1), quietly = TRUE)))'
+
+COPY Test-Docker/docker /opt/testmpem/docker
+
+RUN chmod 0755 /opt/testmpem/docker/entrypoint.sh \
+    && ln -s /opt/testmpem/docker/entrypoint.sh /usr/local/bin/testmpem-container
+
+WORKDIR /work/Test
+ENTRYPOINT ["/usr/local/bin/testmpem-container"]
+CMD ["help"]

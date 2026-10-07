@@ -53,7 +53,7 @@ for(ii in 1:nsim){
   print(gsim)
   print("numerical jacobian")
   print(jnum)
-  print("min/max calc-num jacobian")
-  print(range(gsim - jnum))
+  print("analytical/numerical Jacobian check")
+  assert_jacobian_close(gsim, jnum)
   cat("\n\n")
 }

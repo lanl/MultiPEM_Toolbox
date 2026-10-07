@@ -1,0 +1,26 @@
+# The digest fixes the R version, compiler toolchain and system libraries used
+# for numerical work.  Refresh it only together with renv.lock and equivalence
+# testing.
+FROM rocker/r-base:4.4.3@sha256:be091b05f241e2c6c76080a182cbdb15084af214fd5a56df0e8589abc407b7bd
+
+ENV RENV_CONFIG_AUTOLOADER_ENABLED=FALSE \
+    RENV_CONFIG_CACHE_ENABLED=FALSE
+
+# Dependencies are restored before source is copied.  Ordinary R/data/input
+# changes therefore reuse this expensive layer.
+COPY Runfiles-Docker/renv.lock /opt/multipem/renv.lock
+RUN Rscript -e 'options(repos = c(CRAN = "http://cran.rstudio.com")); install.packages("renv", dependencies = c("Depends", "Imports", "LinkingTo")); renv::restore(project = "/opt/multipem", library = "/usr/local/lib/R/site-library", lockfile = "/opt/multipem/renv.lock", prompt = FALSE)' \
+    && Rscript -e 'required <- c("Matrix", "numDeriv", "doFuture", "future", "iterators", "adaptMCMC", "FME", "ramcmc", "Rcpp", "RcppEigen"); stopifnot(all(vapply(required, requireNamespace, logical(1), quietly = TRUE)))'
+
+COPY Code /opt/multipem/Code
+COPY Applications /opt/multipem/Applications
+COPY Runfiles /work/Runfiles
+COPY Runfiles-Docker/docker /opt/multipem/docker
+
+RUN chmod 0755 /opt/multipem/docker/entrypoint.sh \
+    && ln -s /opt/multipem/docker/entrypoint.sh /usr/local/bin/multipem-container \
+    && ln -s /opt/multipem/Code /work/Runfiles/Code
+
+WORKDIR /work/Runfiles
+ENTRYPOINT ["/usr/local/bin/multipem-container"]
+CMD ["help"]

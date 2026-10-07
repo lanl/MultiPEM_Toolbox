@@ -15,53 +15,46 @@
 #                                                                      #
 ########################################################################
 
+if (!requireNamespace("FME", quietly = TRUE)) {
+  stop("The FME package is required", call. = FALSE)
+}
+
 set.seed(100)
+mu_0 <- -3
+sig_0 <- 4
+sig <- 2
+y <- rnorm(1, mu_0, sig)
 
-ll <- function(x)
-{
-  return(dnorm(y,x,sig,log=TRUE))
+ll <- function(x) dnorm(y, x, sig, log = TRUE)
+lp <- function(x) dnorm(x, mu_0, sig_0, log = TRUE)
+
+burnin <- 5000L
+niter <- burnin + 20000L
+samp_po <- FME::modMCMC(
+  function(x) -2 * ll(x), 0, prior = function(x) -2 * lp(x),
+  jump = 0.1, niter = niter, burninlength = burnin,
+  updatecov = 100, ntrydr = 2, verbose = FALSE
+)
+
+sample <- as.numeric(samp_po$pars)
+sig2_p <- sig^2 * sig_0^2 / (sig^2 + sig_0^2)
+mu_p <- sig2_p * (y / sig^2 + mu_0 / sig_0^2)
+sig_p <- sqrt(sig2_p)
+
+if (length(sample) != niter - burnin || !all(is.finite(sample))) {
+  stop("FME returned an invalid posterior sample", call. = FALSE)
 }
-
-lp <- function(x)
-{
-  return(dnorm(x,mu_0,sig_0,log=TRUE))
+mean_error <- abs(mean(sample) - mu_p)
+sd_error <- abs(sd(sample) - sig_p)
+if (mean_error > 0.1) {
+  stop(sprintf("FME posterior mean error %.6f exceeds 0.1", mean_error),
+       call. = FALSE)
 }
-
-mu_0 = -3 
-sig_0 = 4
-
-sig = 2
-y = rnorm(1,mu_0,sig)
-cat(paste("y = ",y,"\n",sep=""))
-
-x0 = 0
-
-require(FME)
-ll_mod = function(x){ -2*ll(x) }
-lp_mod = function(x){ -2*lp(x) }
-burnin = 100000
-niter = burnin+1000000
-samp_po <- modMCMC(ll_mod,x0,prior=lp_mod,
-                   jump=0.1,
-                   niter=niter,burninlength=burnin,
-                   updatecov=100,ntrydr=2,
-                   verbose=TRUE)
-
-pdf("posterior.pdf")
-par(mgp=c(2,1,0),pty="s")
-hist(samp_po$pars,prob=TRUE,xlab="x",
-     main="Histogram of Sampled Posterior")
-sig2_p = sig^2*sig_0^2/(sig^2+sig_0^2)
-mu_p = sig2_p*(y/sig^2+mu_0/sig_0^2)
-sig_p = sqrt(sig2_p)
-xx = seq(mu_p-4*sig_p,mu_p+4*sig_p,length=1001)
-lines(xx,dnorm(xx,mu_p,sig_p),lwd=2,col="green")
-legend("topleft","true posterior",lwd=2,col="green")
-graphics.off()
-
-cat(paste("Sample posterior mean = ",
-          mean(samp_po$pars),"\n",sep=""))
-cat(paste("Posterior mean = ",mu_p,"\n",sep=""))
-cat(paste("Sample posterior SD = ",
-          sd(samp_po$pars),"\n",sep=""))
-cat(paste("Posterior SD = ",sig_p,"\n",sep=""))
+if (sd_error > 0.1) {
+  stop(sprintf("FME posterior SD error %.6f exceeds 0.1", sd_error),
+       call. = FALSE)
+}
+message(sprintf(
+  "FME posterior assertions passed (mean error %.6f; SD error %.6f)",
+  mean_error, sd_error
+))

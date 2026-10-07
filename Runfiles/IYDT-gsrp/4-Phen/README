@@ -1,67 +1,68 @@
-A symbolic link to IYDT phenomenology-specific code needed for
-these analyses should be placed in this directory as follows:
+# IYDT-GSRP four-phenomenology MultiPEM analyses
 
-% ln -s ../../../Applications/Code/IYDT-gsrp/Phenomenology/ Code
+These decks combine seismic, acoustic, optical, and crater observations to
+infer SUGAR log-yield and HOB. Rapid and complete assessments are provided with
+fixed benchmark yields or errors-in-variables (EIV) yields for the applicable
+phenomenologies.
 
-Joint analysis with 4 phenomenologies:
-  seismic, acoustic, optical, crater
+| Directory | Yield treatment | Assessment |
+| --- | --- | --- |
+| `I-EIV-SUGAR-hob-0` | EIV | rapid calibration + event |
+| `I-SUGAR-hob-0` | fixed | rapid calibration + event |
+| `I-EIV-SUGAR-hob` | EIV | complete joint inference |
+| `I-SUGAR-hob` | fixed | complete joint inference |
 
-Sub-analysis Directories:
+## Native prerequisites
 
-I-EIV-SUGAR-hob-0 - two-stage rapid assessment of
-                    W/HOB inference for "new event"
-                    SUGAR, with errors-in-variables
-                    yields for benchmark data
-I-SUGAR-hob-0     - two-stage rapid assessment of W/HOB
-                    inference for "new event" SUGAR, with
-                    fixed yields for benchmark data
-I-EIV-SUGAR-hob   - complete assessment of W/HOB inference
-                    for "new event" SUGAR, with
-                    errors-in-variables yields for
-                    benchmark data
-I-SUGAR-hob       - complete assessment of W/HOB inference
-                    for "new event" SUGAR, with fixed
-                    yields for benchmark data
-         
+```text
+ln -s ../../../Applications/Code/IYDT-gsrp/Phenomenology Code
+mkdir -p Opt
+```
 
-*** MULTI-STAGE RAPID ASSESSMENT ***
+Run every matching single-phenomenology calibration before a four-phenomenology
+deck. Stage rapid starting values as follows:
 
-For rapid assessments in which the calibration inference
-is intended for use in multiple new event inferences:
-1) Go to the directory containing the baseline case:
+```text
+cp ../Seismic/I-SUGAR-hob-0/opt.RData Opt/opt_1_0.RData
+cp ../Acoustic/I-SUGAR-hob-0/opt.RData Opt/opt_2_0.RData
+cp ../Optical/I-EIV-SUGAR-hob-0/opt.RData Opt/opt_3_eiv_0.RData
+cp ../Optical/I-SUGAR-hob-0/opt.RData Opt/opt_3_0.RData
+cp ../Crater/I-EIV-SUGAR-0/opt.RData Opt/opt_4_eiv_0.RData
+cp ../Crater/I-SUGAR-0/opt.RData Opt/opt_4_0.RData
+```
 
-% cd I-EIV-SUGAR-hob-0
+Stage complete-assessment starting values separately:
 
-2) Run the runMPEM.r file to calibrate the model parameters
+```text
+cp ../Seismic/I-SUGAR-hob/opt.RData Opt/opt_1.RData
+cp ../Acoustic/I-SUGAR-hob/opt.RData Opt/opt_2.RData
+cp ../Optical/I-EIV-SUGAR-hob/opt.RData Opt/opt_3_eiv.RData
+cp ../Optical/I-SUGAR-hob/opt.RData Opt/opt_3.RData
+cp ../Crater/I-EIV-SUGAR/opt.RData Opt/opt_4_eiv.RData
+cp ../Crater/I-SUGAR/opt.RData Opt/opt_4.RData
+```
 
-3) Copy the .RData file into the additional case directories
-   upon completion of this run, for example:
+Each deck reads the subset matching its EIV/fixed and rapid/complete name.
+Because `opt_files_in` is hard-coded, all referenced files must exist before the
+deck reaches MLE optimization.
 
-% cp .RData ../<additional case directory>/.
+## Execution
 
-4) For each case, run the runMPEM_0.r file to characterize the
-   new event parameters
+For a rapid directory, run `runMPEM.r` and then `runMPEM_0.r` after successful
+calibration. Before the event deck, always preserve the pristine calibration
+`.RData` separately (for example, as `.RData-calibration`) for future event
+analyses. Run native batch jobs in the background as described in `../README`.
+For a complete directory, run only `runMPEM.r`; it estimates calibration and
+new-event quantities jointly.
 
-If only one rapid assessment is to be conducted, first run the
-runMPEM.r file and once the job completes, run the runMPEM_0.r
-file.
+## Docker staging
 
-If a more informed starting value for MultiPEM log-likelihood
-optimization is desired:
-1) Create an "Opt" directory
-2) Copy MLE results from each optimal single-phenomenology
-   analysis into this "Opt" directory
-3) Continue with step 1) above
+Every source `opt.RData` remains in its producing job snapshot. Copy it from
+`RESULTS/work/IYDT-gsrp/PHENOMENOLOGY/ANALYSIS/opt.RData` into the canonical
+destinations above before creating the four-phenomenology Docker job. Job
+creation then captures the populated `Opt` directory. Do not attempt to reuse
+one results directory across different analysis paths.
 
-        cp ../Seismic/I-SUGAR-hob-0/opt.RData Opt/opt_1_0.RData
-                                                                seismic
-        cp ../Acoustic/I-SUGAR-hob-0/opt.RData Opt/opt_2_0.RData       
-                                                                acoustic
-        cp ../Optical/I-EIV-SUGAR-hob-0/opt.RData Opt/opt_3_eiv_0.RData
-                                                                optical
-        cp ../Optical/I-SUGAR-hob-0/opt.RData Opt/opt_3_0.RData
-                                                                optical
-        cp ../Crater/I-EIV-SUGAR-0/opt.RData Opt/opt_4_eiv_0.RData 
-                                                                crater
-        cp ../Crater/I-SUGAR-0/opt.RData Opt/opt_4_0.RData
-                                                                crater
+The Docker analysis names begin `IYDT-gsrp/4-Phen/`; see
+`../../../Runfiles-Docker/README` for job lifecycle, checkpoint, and resource
+controls.

@@ -1,33 +1,39 @@
-A symbolic link to IYDT phenomenology-specific code needed for
-these analyses should be placed in this directory as follows:
+# IYDT-GSRP acoustic analyses
 
-% ln -s ../../../Applications/Code/IYDT-gsrp/Phenomenology/ Code
+These decks infer SUGAR log-yield and HOB from two acoustic response channels.
+Application data and code are configured at the IYDT-GSRP level; no additional
+phenomenology-prior link is used by the shipped acoustic decks.
 
-Sub-analysis Directories:
+## Analyses
 
-I-SUGAR-hob-0 - two-stage rapid assessment of W/HOB
-                inference for "new event" SUGAR
-I-SUGAR-hob   - complete assessment of W/HOB inference
-                for "new event" SUGAR
+| Directory | Type | Decks |
+| --- | --- | --- |
+| `I-SUGAR-hob-0` | two-stage rapid assessment | `runMPEM.r`, `runMPEM_0.r` |
+| `I-SUGAR-hob` | complete joint assessment | `runMPEM.r` |
 
-*** MULTI-STAGE RAPID ASSESSMENT ***
+Run the rapid case from its directory:
 
-For rapid assessments in which the calibration inference
-is intended for use in multiple new event inferences:
-1) Go to the directory containing the baseline case:
+```text
+R CMD BATCH runMPEM.r runMPEM.out &
+```
 
-% cd I-SUGAR-hob-0
+After the background calibration finishes successfully:
 
-2) Run the runMPEM.r file to calibrate the model parameters
+```text
+cp .RData .RData-calibration
+R CMD BATCH runMPEM_0.r runMPEM_0.out &
+```
 
-3) Copy the .RData file into the additional case directories
-   upon completion of this run, for example:
+The calibration produces `opt.RData`, which is required under an exact renamed
+path by the `2-Phen-sa` and `4-Phen` shipped decks. Retain
+`.RData-calibration` as a pristine workspace for future event analyses; never
+use an event-modified `.RData` as the saved calibration.
 
-% cp .RData ../<additional case directory>/.
+Run the complete case with only `runMPEM.r`. Docker names are
+`IYDT-gsrp/Acoustic/I-SUGAR-hob-0` and
+`IYDT-gsrp/Acoustic/I-SUGAR-hob`. Docker snapshots application code/data and
+maintains a pristine rapid-calibration checkpoint automatically.
 
-4) For each case, run the runMPEM_0.r file to characterize the
-   new event parameters
-
-If only one rapid assessment is to be conducted, first run the
-runMPEM.r file and once the job completes, run the runMPEM_0.r
-file.
+Review Bayesian, sampler, sample-count, worker-count, and seed settings before
+production use. Confirm completion from the transcript and process status, not
+merely from the presence of `.RData`.

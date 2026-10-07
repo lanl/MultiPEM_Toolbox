@@ -1,23 +1,329 @@
-The file "tests.r" will generate output from two global
-verifiction tests:
-1) "Covariance": Verify Jacobian of transformation used for
-   general observational error covariance structure
-2) "FME_test": Verify performance of adaptive Markov chain
-   Monte Carlo algorithm in R package FME by comparing
-   posterior samples to analytical solutions
+MultiPEM Docker test workflow
+=============================
 
-The global verification tests can be run by executing the
-following steps, assuming the docker software has been installed
-on the user's machine:
+This directory provides one versioned Docker runtime for the verification
+tests stored in `../Test`. The base-R launcher creates an auditable, writable
+job snapshot and starts each test as a detached container by default. Test
+output never writes into the canonical `Test`, `Code`, or `Applications`
+directories.
 
-1) Build the mpem/global image (see the README file in the
-   MultiPEM_Toolbox/Runfiles-Docker directory).
+Host requirements
+-----------------
 
-2) Build the global/test image in this directory
+The host needs:
 
-% docker build -t global/test .
+* R 4.0 or newer, with `Rscript` on `PATH`;
+* a Docker CLI connected to a running Docker engine configured for Linux
+  containers;
+* a processor architecture supported by the pinned base image, or Docker
+  emulation for that architecture;
+* permission for Docker to bind-mount the repository and results locations;
+  and
+* enough disk space for the runtime image, job snapshots, and test output.
 
-3) Run the global tests.
+No host R packages, Bash, Docker Compose, compiler toolchain, or symbolic
+links are required. The optional `./testmpem` convenience wrapper needs a
+POSIX `/bin/sh`; `Rscript testmpem.R` is the portable interface for macOS,
+Linux, and Windows. Building the image or refreshing dependencies requires
+network access. Test jobs need no network access after the image is built.
 
-% docker run -it --rm -v <full path to this directory>:\
-  /Test -d global/test
+`Test-Docker` must remain beside the source trees it snapshots:
+
+    MultiPEM_Toolbox/
+        Applications/
+        Code/
+        Test/
+        Test-Docker/
+
+On macOS and Windows, configure Docker Desktop to share the repository and
+results locations with its Linux virtual machine. Native Windows users can
+run the `Rscript testmpem.R` commands from PowerShell or Command Prompt. A
+remote Docker daemon works only if it can access each bind-mounted path at
+exactly the path sent by the client.
+
+Run the diagnostic before the first build and whenever the environment
+changes:
+
+    Rscript testmpem.R doctor
+
+It validates the host R version, repository layout, test-group mappings,
+application code and fixture locations, Docker connection, Linux-container
+mode, and runtime-image availability.
+
+Run the host-side launcher contract checks after changing `testmpem.R` or its
+registry handling:
+
+    Rscript test-launcher.R
+
+These checks exercise suite discovery and assert clean rejection of path
+traversal, unknown suites and commands, missing option values, invalid CPU and
+volume-label settings, incomplete status requests, and malformed registry
+schemas. They use disposable temporary fixtures and do not start a numerical
+test container.
+
+Configuration
+-------------
+
+The launcher accepts these optional environment variables:
+
+* `TEST_MPEM_IMAGE` selects the image name and tag. Its default is
+  `mpem/test-runtime:4.4.3`.
+* `TEST_MPEM_RESULTS_ROOT` selects the parent directory for automatically
+  named jobs. Its default is `Test-Docker/results`.
+* `TEST_MPEM_VOLUME_LABEL` may be `z` or `Z` when bind mounts require an
+  SELinux relabeling option. Leave it unset on other systems.
+
+Command-line options such as `--results`, `--cpus`, and `--memory` apply to a
+single test job.
+
+Build and run
+-------------
+
+From `Test-Docker`:
+
+    Rscript testmpem.R build
+    Rscript testmpem.R list
+    Rscript testmpem.R run global
+    Rscript testmpem.R run IYDT/Seismic
+    Rscript testmpem.R run IYDT/Checkpoint
+    Rscript testmpem.R run IYDT/Bayes
+
+`list` discovers test suites from canonical `tests.r` files under `../Test`.
+`global` selects `../Test/tests.r`; a nested name selects the corresponding
+directory, such as `../Test/IYDT/Seismic/tests.r`.
+
+Every invocation without `--results` creates a new unique results directory
+under `Test-Docker/results`. Its name includes the suite, UTC start time, and
+launcher process ID. To put a job elsewhere, supply an empty or nonexistent
+directory:
+
+    Rscript testmpem.R run IYDT/Acoustic --results /path/to/acoustic-results
+
+Jobs run in the background unless `--foreground` is supplied. The detached
+command prints the container name and results directory. Use that name with:
+
+    Rscript testmpem.R jobs
+    Rscript testmpem.R status JOB
+    Rscript testmpem.R logs -f JOB
+    Rscript testmpem.R wait JOB
+    Rscript testmpem.R stop JOB
+    Rscript testmpem.R clean JOB
+
+`logs -f` follows live output. `wait` waits for completion and returns the
+test exit code. `stop` terminates a running test. `clean` removes an exited
+managed container while retaining all result files. Containers remain after
+completion until explicitly cleaned, so Docker status and logs remain
+available.
+
+An explicit name and resource limits are optional:
+
+    Rscript testmpem.R run IYDT/Crater --name crater-check --cpus 4 --memory 8g
+
+Container names must be unique. Stop or wait for a running container before
+cleaning it. Remove a completed container or choose a new name before reusing
+an explicit name.
+
+Job snapshots and output
+------------------------
+
+Each new job gets a private snapshot. A global job has this shape:
+
+    RESULTS/
+        .testmpem/
+            created
+            image-id
+            initial-files.sha256
+            last-container
+            test
+            worker-controls.tsv
+        work/
+            Test/
+                Code/
+                tests.r
+
+A nested group also receives its registered application code and fixtures:
+
+    RESULTS/work/Test/IYDT/
+        Code/
+        Test/
+        Seismic/tests.r
+
+For a `Runfile`, `Bayes`, `Bayes-Backends`, `MultiPhenomenology`, `Parallel`,
+`Prediction`, `Profile`, or `Imputation`
+suite, the snapshot also contains only the registered smoke case plus the
+shared code, IYDT code, crater prior code, and data needed by that case.
+`Runfile` reduces the copied deck to one MLE start, one worker, one event
+imputation, and no Bayesian phase. `Bayes` instead uses fixed seeds, one
+worker, short burn-in and sampling chains, and numerical derivative
+assertions. `Bayes-Backends` executes bounded real-application RAM and NUTS
+chains. `Parallel` compares deterministic one-worker and two-worker workflows.
+`Prediction` directly validates fitted/observed and covariance output from
+`predict.r`; `Profile` runs a reduced five-point profile-likelihood workflow.
+`Imputation` runs two calibration-draw event analyses through RAM and SMC and
+checks pooled posterior dimensions and per-imputation diagnostics.
+The `MultiPhenomenology` suite additionally stages the optical and crater
+single-phenomenology cases, then uses their generated optimization files in a
+combined workflow. In every case only the private snapshot is edited; the
+repository runfile is not changed.
+
+The test executes from its suite directory in the snapshot. Canonical source
+files are copied with their relative layout intact, then worker-pool calls in
+the snapshot are guarded against CPU oversubscription. Initial SHA-256 hashes
+record the prepared inputs. Later source edits cannot change a running or
+previously prepared job.
+
+The selected suite directory contains:
+
+    .RData
+    .testmpem.status
+    test-job.out
+    tests.out
+    tests.cpu-adjustments.log
+
+`.RData` contains objects produced by the canonical `tests.r`. `tests.out` and
+the CPU log describe the latest invocation. `test-job.out` appends console
+output across every invocation of the same job directory. The status file
+records the current state, timestamps, suite, and exit code. Docker retains
+the same console stream while the managed container exists.
+
+Reusing `--results` deliberately reruns the same preserved snapshot. The
+launcher rejects a directory assigned to another suite, a different runtime
+image, an incomplete snapshot, or an unrecognized nonempty directory. Use a
+new results directory when the job should include newer canonical source.
+
+CPU and memory assignment
+-------------------------
+
+The runtime detects CPU capacity visible to the container. Before a snapshot
+is run, calls that pass the MultiPEM variables `ncor`, `ncor_map`, `ncor_mc`,
+`ncor_smc`, `ncores_mle`, `ncores_map`, `ncores_mc`, or `ncores_smc` as a
+worker-pool size are instrumented. If a requested pool exceeds available
+capacity, only the effective pool is reduced. The logical `ncores*` variable
+is left unchanged, preserving calculation branches, batching, seeds, and
+object contents that depend on it. The test continues and writes a warning
+with the requested and assigned counts to both console output and
+`tests.cpu-adjustments.log`.
+
+Use `--cpus N` to impose a smaller Docker CPU quota. The worker ceiling is
+`max(1, floor(N))`; fractional quota is still honored by Docker. Without this
+option, Docker's visible CPU/cgroup capacity is the ceiling. `--memory SIZE`
+passes a Docker memory limit such as `8g`. A memory limit can cause the
+container to fail if a test needs more memory; it does not change numerical
+methods.
+
+The instrumentation report in `.testmpem/worker-controls.tsv` identifies each
+guarded file, line, variable, and control type. CPU limiting changes
+concurrency, not mathematical inputs. Floating-point operation order in
+parallel libraries can still produce ordinary numerical roundoff differences.
+
+Running all supplied tests
+--------------------------
+
+The supplied suites are independent jobs. Run each one and wait for its
+printed job name:
+
+    Rscript testmpem.R run global
+    Rscript testmpem.R run IYDT/Seismic
+    Rscript testmpem.R run IYDT/Acoustic
+    Rscript testmpem.R run IYDT/Crater
+    Rscript testmpem.R run IYDT/Optical
+    Rscript testmpem.R run IYDT/Data
+    Rscript testmpem.R run IYDT/Transform
+    Rscript testmpem.R run IYDT/Prior
+    Rscript testmpem.R run IYDT/Checkpoint
+    Rscript testmpem.R run IYDT/Contract
+    Rscript testmpem.R run IYDT/Summary
+    Rscript testmpem.R run IYDT/Runfile
+    Rscript testmpem.R run IYDT/Bayes
+    Rscript testmpem.R run IYDT/Bayes-Backends
+    Rscript testmpem.R run IYDT/MultiPhenomenology
+    Rscript testmpem.R run IYDT/Parallel
+    Rscript testmpem.R run IYDT/Prediction
+    Rscript testmpem.R run IYDT/Profile
+    Rscript testmpem.R run IYDT/Imputation
+
+Starting several jobs simultaneously divides neither CPUs nor memory between
+them. To prevent aggregate oversubscription, run them sequentially or assign
+`--cpus` limits whose total does not exceed host capacity.
+
+IYDT suites assert output dimensions, finite values, and numerical tolerances.
+A derivative mismatch therefore gives the job a nonzero exit status;
+reviewing a printed difference range is not sufficient.
+
+Adding tests
+------------
+
+To add a suite to an existing registered group, create its canonical runner:
+
+    Test/IYDT/NewPhenomenology/tests.r
+
+Use the same relative layout as the other IYDT runners: group application code
+is available at `../Code`, and group fixtures at `../Test`. `testmpem.R list`
+discovers the suite automatically; no Dockerfile or image rebuild is required.
+A new job snapshots the new source.
+
+To add an entirely new test group:
+
+1. Put each canonical runner under `Test/GROUP/SUITE/tests.r`.
+2. Put application code under `Applications/Code/CODE_DIRECTORY`.
+3. Put shared test fixtures under `Applications/Test/FIXTURE_DIRECTORY`.
+4. Add exactly one tab-separated row to `test-groups.tsv`. Use `-` when no
+   secondary code tree is needed; the last three fields select the runfile
+   family, relative smoke-case directory, and application data:
+
+       tests  code  fixtures  secondary_code  smoke_runfiles  smoke_case  smoke_data
+       GROUP  CODE  FIXTURES  -               RUNFILES        PATH        DATA
+
+5. Run `Rscript testmpem.R doctor`, then `Rscript testmpem.R list` and the new
+   suite.
+
+The `tests` value must equal the top-level directory below `Test`. The `code`
+and `fixtures` values name directories below `Applications/Code` and
+`Applications/Test`. In the snapshot these are placed at
+`Test/GROUP/Code` and `Test/GROUP/Test`, respectively. The smoke fields
+identify paths below `Runfiles` and `Applications/Data` and are copied only
+for a runfile integration suite. The currently recognized integration suite
+names are `Runfile`, `Bayes`, `Bayes-Backends`, `MultiPhenomenology`,
+`Parallel`, `Prediction`, `Profile`, and `Imputation`.
+`MultiPhenomenology` staging also copies its optical and
+two-phenomenology runfile cases.
+
+To add another application-independent test, edit `Test/tests.r` or files it
+sources from `Code`. The `global` job always snapshots the complete `Code`
+directory as `Test/Code`.
+
+Dependencies and reproducibility
+--------------------------------
+
+`Dockerfile.runtime` pins the base image by digest and `renv.lock` pins R
+packages. Test source is mounted from an immutable-per-job snapshot, so source
+changes do not require an image rebuild. Rebuild only when the runtime or lock
+changes:
+
+    Rscript testmpem.R refresh-lock
+    Rscript testmpem.R build --no-cache
+
+Refreshing dependencies is a maintainer operation and requires network
+access. Review lock changes and rerun every suite after a refresh.
+
+Compare two saved workspaces when validating a calculation change:
+
+    Rscript testmpem.R compare left.RData right.RData
+    Rscript testmpem.R compare left.RData right.RData 1e-10
+
+The comparison requires identical object names and uses R's `all.equal` at
+the requested tolerance for each object.
+
+Saved test workspaces are disposable artifacts. In production benchmarking
+and calibration workflows, preserve a pristine `.RData` checkpoint before an
+event analysis and run each event from a copy of that checkpoint.
+
+Troubleshooting
+---------------
+
+If `doctor` cannot reach Docker, start the engine and verify the current user
+can run `docker info`. If a bind mount is denied, share the path in Docker
+Desktop or set `TEST_MPEM_VOLUME_LABEL=z` on an SELinux host. If a detached
+job fails, inspect `status`, `logs`, the suite's `tests.out`, and
+`.testmpem.status`. All source and generated artifacts remain in the printed
+results directory even after `clean` removes the container.

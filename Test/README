@@ -1,12 +1,125 @@
-A symbolic link to the application independent code needed for
-verification tests should be placed in this directory as follows:
+# Canonical verification tests
 
-% ln -s ../Code/ Code
+`Test` contains the entry points for application-independent and IYDT
+verification suites. These are calculation checks, not unit tests managed by an
+R package framework.
 
-The file "tests.r" will generate output from two global
-verifiction tests:
-1) "Covariance": Verify Jacobian of transformation used for
-   general observational error covariance structure
-2) "FME_test": Verify performance of adaptive Markov chain
-   Monte Carlo algorithm in R package FME by comparing
-   posterior samples to analytical solutions
+## Supplied suites
+
+| Suite | Runner | Scope |
+| --- | --- | --- |
+| `global` | `tests.r` | covariance Jacobians, FME/RAM/NUTS/SMC backends, and unbounded/bounded/transformed observed-information assertions |
+| `IYDT/Seismic` | `IYDT/Seismic/tests.r` | seismic forward-model and Jacobian cases |
+| `IYDT/Acoustic` | `IYDT/Acoustic/tests.r` | acoustic forward-model and Jacobian cases |
+| `IYDT/Optical` | `IYDT/Optical/tests.r` | optical forward-model and Jacobian cases |
+| `IYDT/Crater` | `IYDT/Crater/tests.r` | crater forward-model and Jacobian cases |
+| `IYDT/Data` | `IYDT/Data/tests.r` | production data contracts and model integration |
+| `IYDT/Transform` | `IYDT/Transform/tests.r` | event transforms and analytical derivatives |
+| `IYDT/Prior` | `IYDT/Prior/tests.r` | application prior densities and gradients |
+| `IYDT/Checkpoint` | `IYDT/Checkpoint/tests.r` | calibration checkpoint preservation and event reuse |
+| `IYDT/Contract` | `IYDT/Contract/tests.r` | rejection of malformed, incomplete, and non-finite model inputs |
+| `IYDT/Summary` | `IYDT/Summary/tests.r` | calibration and event summary-output structure |
+| `IYDT/Runfile` | `IYDT/Runfile/tests.r` | reduced real calibration/event runfile execution and pristine-checkpoint preservation |
+| `IYDT/Bayes` | `IYDT/Bayes/tests.r` | bounded fixed-seed Bayesian calibration/event execution plus likelihood, posterior, and EIV derivative checks |
+| `IYDT/Bayes-Backends` | `IYDT/Bayes-Backends/tests.r` | bounded real-application RAM and NUTS calibration/event execution |
+| `IYDT/MultiPhenomenology` | `IYDT/MultiPhenomenology/tests.r` | optical/crater integration using staged single-phenomenology optimization inputs |
+| `IYDT/Parallel` | `IYDT/Parallel/tests.r` | one-worker/two-worker deterministic calibration/event equivalence |
+| `IYDT/Prediction` | `IYDT/Prediction/tests.r` | direct forward-model agreement plus observation and covariance identities |
+| `IYDT/Profile` | `IYDT/Profile/tests.r` | reduced profile-likelihood optimization and plot generation |
+| `IYDT/Imputation` | `IYDT/Imputation/tests.r` | two-imputation RAM/SMC inference, pooled samples, diagnostics, and checkpoint preservation |
+
+The global runner sources `Code/test_cov.r`, `Code/test_fme.r`,
+`Code/test_samplers.r`, `Code/test_smc.r`, and `Code/test_information.r`.
+The sampler checks use
+a fixed-seed correlated Gaussian target to assert posterior moments,
+reproducibility, acceptance diagnostics, and identical callback/fused NUTS
+results. The SMC checks add exact sequential reproducibility, one-worker versus
+two-worker statistical agreement, adaptive and warning-only range controls,
+particle-pool sampling with and without replacement, ESS/weight arithmetic,
+mixed and total non-finite-density handling, range validation, and an
+all-zero-mass failure assertion. The
+information checks compare calibration and event covariance
+blocks with the inverse of a numerical Hessian and exercise the one-sided,
+two-sided, and application-transform chain-rule branches. The IYDT
+runners source canonical application code from `Applications/Code/IYDT-gsrp`
+and fixtures from `Applications/Test/IYDT`. IYDT Jacobian checks are
+assertions: a dimension, finite-value, or tolerance mismatch produces a
+nonzero exit status.
+
+## Recommended Docker workflow
+
+From `../Test-Docker`:
+
+```text
+Rscript testmpem.R doctor
+Rscript testmpem.R build
+Rscript testmpem.R list
+Rscript testmpem.R run global
+Rscript testmpem.R run IYDT/Seismic
+Rscript testmpem.R run IYDT/Acoustic
+Rscript testmpem.R run IYDT/Optical
+Rscript testmpem.R run IYDT/Crater
+Rscript testmpem.R run IYDT/Data
+Rscript testmpem.R run IYDT/Transform
+Rscript testmpem.R run IYDT/Prior
+Rscript testmpem.R run IYDT/Checkpoint
+Rscript testmpem.R run IYDT/Contract
+Rscript testmpem.R run IYDT/Summary
+Rscript testmpem.R run IYDT/Runfile
+Rscript testmpem.R run IYDT/Bayes
+Rscript testmpem.R run IYDT/Bayes-Backends
+Rscript testmpem.R run IYDT/MultiPhenomenology
+Rscript testmpem.R run IYDT/Parallel
+Rscript testmpem.R run IYDT/Prediction
+Rscript testmpem.R run IYDT/Profile
+Rscript testmpem.R run IYDT/Imputation
+```
+
+Each command creates an isolated snapshot and prints a job name and results
+directory. Use `status`, `logs -f`, `wait`, and `clean` as documented in
+`../Test-Docker/README`. Docker is preferred because it pins R packages and
+prevents test output from modifying canonical source directories.
+
+## Native workflow
+
+Install at least `Matrix`, `numDeriv`, `FME`, `adaptMCMC`, `Rcpp`, and
+`RcppEigen`. From `Test`, create the shared code link:
+
+```text
+ln -s ../Code Code
+```
+
+Run the global suite from this directory:
+
+```text
+R CMD BATCH tests.r tests.out &
+```
+
+For IYDT suites, first create the links described in `IYDT/README`, then run
+from the chosen suite directory, for example:
+
+```text
+cd IYDT/Seismic
+R CMD BATCH tests.r tests.out &
+```
+
+The trailing `&` returns the shell prompt while the suite runs. Follow progress
+with `tail -f tests.out` and inspect the final transcript and process status.
+
+Each runner saves `.RData` and prints named test sections to `tests.out`.
+Inspect the complete transcript and the process exit status; do not infer
+success merely from the presence of output files.
+
+Test workspaces are disposable. For real benchmarking or calibration runs,
+preserve a pristine `.RData` checkpoint before any event analysis and use a
+copy for each event so event results cannot overwrite the reusable baseline.
+
+## Adding tests
+
+Application-independent checks belong in `../Code` and are sourced by
+`tests.r`. Application-specific fixtures belong under `../Applications/Test`;
+their suite runner belongs under `Test/GROUP/SUITE/tests.r`.
+
+Register a new group in `../Test-Docker/test-groups.tsv`. A new suite beneath
+an existing group is discovered automatically. Run `testmpem.R doctor`, list
+the suites, and execute every affected suite after a change.

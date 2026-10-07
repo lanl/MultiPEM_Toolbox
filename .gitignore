@@ -1,0 +1,47 @@
+# R session, batch, and analysis output
+.RData*
+*.RData
+.Rhistory
+.Rapp.history
+.Ruserdata
+*.Rout
+*.out
+*.log
+
+# MultiPEM Docker jobs and runtime metadata
+/Runfiles-Docker/results/
+/Test-Docker/results/
+.mpem/
+.testmpem/
+.mpem.status
+.testmpem.status
+
+# Generated plots
+Rplots.pdf
+profile_ll*.pdf
+
+# Compiled and crash artifacts
+*.o
+*.so
+*.dll
+*.dylib
+*.dSYM/
+*.gcda
+*.gcno
+core
+core.*
+
+# Local R environments and package checks
+.Rproj.user/
+renv/library/
+renv/staging/
+renv/python/
+*.Rcheck/
+
+# Editor, operating-system, and temporary files
+.DS_Store
+Thumbs.db
+*.swp
+*.swo
+*.tmp
+*~

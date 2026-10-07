@@ -26,3 +26,18 @@ cat("\n")
 print("***** test_fme.r *****")
 cat("\n")
 source(paste(tdir,"/test_fme.r",sep=""),local=TRUE)
+cat("\n")
+
+print("***** test_samplers.r *****")
+cat("\n")
+source(paste(tdir,"/test_samplers.r",sep=""),local=TRUE)
+cat("\n")
+
+print("***** test_smc.r *****")
+cat("\n")
+source(paste(tdir,"/test_smc.r",sep=""),local=TRUE)
+cat("\n")
+
+print("***** test_information.r *****")
+cat("\n")
+source(paste(tdir,"/test_information.r",sep=""),local=TRUE)

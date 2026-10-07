@@ -1,55 +1,40 @@
-A symbolic link to IYDT phenomenology-specific code needed for
-these analyses should be placed in this directory as follows:
+# IYDT-GSRP optical-crater MultiPEM analyses
 
-% ln -s ../../../Applications/Code/IYDT-gsrp/Phenomenology/ Code
+These two-stage rapid assessments combine optical and crater observations to
+infer SUGAR log-yield and HOB. The EIV case infers selected benchmark yields;
+the other fixes benchmark yields at their supplied values.
 
-Joint analysis with 2 phenomenologies:
-  optical, crater
+| Directory | Benchmark-yield treatment |
+| --- | --- |
+| `I-EIV-SUGAR-hob-0` | errors in variables |
+| `I-SUGAR-hob-0` | fixed |
 
-Sub-analysis Directories:
+## Native prerequisites
 
-I-EIV-SUGAR-hob-0 - two-stage rapid assessment of
-                    W/HOB inference for "new event"
-                    SUGAR, with errors-in-variables
-                    yields for benchmark data
-I-SUGAR-hob-0     - two-stage rapid assessment of W/HOB
-                    inference for "new event" SUGAR, with
-                    fixed yields for benchmark data
+```text
+ln -s ../../../Applications/Code/IYDT-gsrp/Phenomenology Code
+mkdir -p Opt
+```
 
-*** MULTI-STAGE RAPID ASSESSMENT ***
+Run the matching single-phenomenology calibrations first and stage their MLE
+results:
 
-For rapid assessments in which the calibration inference
-is intended for use in multiple new event inferences:
-1) Go to the directory containing the baseline case:
+```text
+cp ../Optical/I-EIV-SUGAR-hob-0/opt.RData Opt/opt_1_eiv_0.RData
+cp ../Crater/I-EIV-SUGAR-0/opt.RData Opt/opt_2_eiv_0.RData
+cp ../Optical/I-SUGAR-hob-0/opt.RData Opt/opt_1_0.RData
+cp ../Crater/I-SUGAR-0/opt.RData Opt/opt_2_0.RData
+```
 
-% cd I-EIV-SUGAR-hob-0
+The EIV deck reads the two `*_eiv_0.RData` files; the fixed-yield deck reads
+the other two. These are required `opt_files_in`, not generated automatically.
 
-2) Run the runMPEM.r file to calibrate the model parameters
+Enter the chosen analysis directory, run `runMPEM.r`, wait for successful
+calibration, and always preserve its pristine `.RData` separately (for example,
+as `.RData-calibration`) for future event analyses. Only then run
+`runMPEM_0.r`; run native batch jobs in the background as described in
+`../README`.
 
-3) Copy the .RData file into the additional case directories
-   upon completion of this run, for example:
-
-% cp .RData ../<additional case directory>/.
-
-4) For each case, run the runMPEM_0.r file to characterize the
-   new event parameters
-
-If only one rapid assessment is to be conducted, first run the
-runMPEM.r file and once the job completes, run the runMPEM_0.r
-file.
-
-If a more informed starting value for MultiPEM log-likelihood
-optimization is desired:
-1) Create an "Opt" directory
-2) Copy MLE results from each optimal single-phenomenology
-   analysis into this "Opt" directory
-3) Continue with step 1) above
-
-        cp ../Optical/I-EIV-SUGAR-hob-0/opt.RData Opt/opt_1_eiv_0.RData
-                                                                optical
-        cp ../Optical/I-SUGAR-hob-0/opt.RData Opt/opt_1_0.RData
-                                                                optical
-        cp ../Crater/I-EIV-SUGAR-0/opt.RData Opt/opt_2_eiv_0.RData 
-                                                                crater
-        cp ../Crater/I-SUGAR-0/opt.RData Opt/opt_2_0.RData
-                                                                crater
+For Docker, copy the four source files out of their single-phenomenology job
+snapshots into the canonical `Opt` destinations before creating the dependent
+job. Run either analysis by its path under `IYDT-gsrp/2-Phen-oc`.

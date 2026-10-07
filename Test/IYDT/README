@@ -1,8 +1,101 @@
-Symbolic links to IYDT-specific code needed for verification
-testing should be placed in this directory as follows:
+# IYDT application verification
 
-% ln -s ../../Applications/Code/IYDT-gsrp/ Code
-% ln -s ../../Applications/Test/IYDT/ Test
+The eighteen child directories run deterministic checks of the IYDT application
+forward models and analytical Jacobians. Each runner sources application code
+from `../Code` and test cases from `../Test` relative to this directory.
 
-The file "tests.r" in each phenomenology directory will
-generate output from the complete set of verification tests.
+## Suites and coverage
+
+| Directory | Cases | Coverage |
+| --- | ---: | --- |
+| `Seismic` | 14 | displacement/velocity models, alternate forms, and event derivatives |
+| `Acoustic` | 14 | duration/impulse model variants and event derivatives |
+| `Optical` | 5 | optical model variants and event derivatives |
+| `Crater` | 6 | crater model variants and event derivatives |
+| `Data` | 8 files | production data contracts and calibration/event model integration |
+| `Transform` | deterministic | event transform round trips, Jacobians, log determinants, and boundaries |
+| `Prior` | deterministic | event, calibration, yield, seismic, and optical prior gradients |
+| `Checkpoint` | deterministic | calibration fit, pristine `.RData` copying, and event reuse |
+| `Contract` | deterministic | rejection of missing covariates, short parameter vectors, and non-finite inputs |
+| `Summary` | deterministic | structural output checks for calibration and event summaries |
+| `Runfile` | reduced integration | actual `runMPEM.r` and `runMPEM_0.r` execution with a preserved calibration checkpoint |
+| `Bayes` | bounded integration | fixed-seed Bayesian calibration/event sampling, likelihood/posterior gradients, EIV likelihood gradients, and pristine-checkpoint preservation |
+| `Bayes-Backends` | bounded integration | real crater calibration/event sampling through both RAM and NUTS |
+| `MultiPhenomenology` | bounded integration | optical and crater calibration outputs staged as `opt.RData` inputs to a combined calibration/event workflow |
+| `Parallel` | bounded integration | deterministic crater calibration/event agreement with one and two workers |
+| `Prediction` | reduced integration | direct forward-model agreement, observation identity, covariance inverse consistency, grouped residual dimensions, and determinism |
+| `Profile` | reduced integration | five-point event profile likelihood, optimizer convergence, and generated plots |
+| `Imputation` | bounded integration | two calibration-draw event analyses through RAM and SMC, pooled sample dimensions, diagnostics, and checkpoint preservation |
+
+The case counts are the scripts sourced by each `tests.r`. Individual fixtures
+use fixed random seeds and compare analytical derivatives with numerical
+derivatives from `numDeriv`. The shared assertion helper checks dimensions and
+finite values and fails the suite when the absolute/relative tolerance is
+exceeded; printed differences are not treated as evidence of success.
+
+## Recommended Docker workflow
+
+No canonical symbolic links are needed. From `../../Test-Docker` run:
+
+```text
+Rscript testmpem.R run IYDT/Seismic
+Rscript testmpem.R run IYDT/Acoustic
+Rscript testmpem.R run IYDT/Optical
+Rscript testmpem.R run IYDT/Crater
+Rscript testmpem.R run IYDT/Data
+Rscript testmpem.R run IYDT/Transform
+Rscript testmpem.R run IYDT/Prior
+Rscript testmpem.R run IYDT/Checkpoint
+Rscript testmpem.R run IYDT/Contract
+Rscript testmpem.R run IYDT/Summary
+Rscript testmpem.R run IYDT/Runfile
+Rscript testmpem.R run IYDT/Bayes
+Rscript testmpem.R run IYDT/Bayes-Backends
+Rscript testmpem.R run IYDT/MultiPhenomenology
+Rscript testmpem.R run IYDT/Parallel
+Rscript testmpem.R run IYDT/Prediction
+Rscript testmpem.R run IYDT/Profile
+Rscript testmpem.R run IYDT/Imputation
+```
+
+Follow each printed job with `Rscript testmpem.R wait JOB`. The private snapshot
+places IYDT code at `Test/IYDT/Code` and fixtures at `Test/IYDT/Test`, matching
+the runners' relative paths.
+
+## Native workflow
+
+From `Test/IYDT`, create these links once:
+
+```text
+ln -s ../../Applications/Code/IYDT-gsrp Code
+ln -s ../../Applications/Test/IYDT Test
+```
+
+Install `numDeriv`, enter a suite directory, and run:
+
+```text
+R CMD BATCH tests.r tests.out &
+```
+
+The trailing `&` returns the shell prompt while the suite runs. Follow progress
+with `tail -f tests.out` and wait for completion before assessing results.
+
+The runner sources `forward.r`, `forward_0.r`, `jacobian.r`, and
+`jacobian_0.r` before executing its cases. It writes `.RData` and `tests.out`
+in the suite directory. Keep generated files out of the canonical tree when a
+clean checkout is required; the Docker workflow does this automatically.
+
+A successful test requires a zero process exit status. Preserve any pristine
+benchmark or calibration `.RData` separately before using a workspace for an
+event analysis; event-analysis output must not replace the calibration
+checkpoint used for later events.
+
+## Maintenance
+
+When shared IYDT model, transform, prior, likelihood, posterior, prediction,
+profile-likelihood, multiple-imputation, or summary code changes, run all
+eighteen suites because
+shared application files are sourced by every runner. Add a new fixture under
+`../../Applications/Test/IYDT`, then source it explicitly from the appropriate
+suite runner. A new suite directory containing `tests.r` is discovered by the
+Docker launcher without changing the registry.

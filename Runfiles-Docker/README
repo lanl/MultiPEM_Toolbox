@@ -1,45 +1,454 @@
-This directory will contain subdirectories for each application.
-Each analysis for a given application will be designated by
-individual subdirectories within the associated application
-directory. Each analysis directory will contain a "runMPEM.r"
-file that provides the R code that is to be run for that analysis.
+MultiPEM Docker workflow
+========================
 
-The Code/ directory contains functions utilized across
-applications, such as the log-likelihood, log-prior, and log-
-posterior distributions and their associated gradients.
+This directory provides one versioned Docker runtime for every registered
+MultiPEM application and analysis. The base-R launcher creates an auditable
+job snapshot and starts the calculation as a detached container by default,
+so closing the terminal does not stop a long analysis.
 
-Analyses can be run by executing the following steps, assuming the
-docker software has been installed on the user's machine:
+Host requirements
+-----------------
 
-1) In the MultiPEM_Toolbox directory (one level up), create
-the mpem/global image using docker:
+The host needs:
 
-% docker build -f Runfiles-Docker/Dockerfile -t mpem/global . 
+* R 4.0 or newer, with `Rscript` on `PATH`;
+* a Docker CLI connected to a running local Docker engine configured for Linux
+  containers;
+* a processor architecture supported by the pinned base image, or Docker
+  emulation for that architecture;
+* permission for Docker to bind-mount the repository and results directories;
+* approximately 1 GB for the runtime image, plus space for job snapshots and
+  calculation output; and
+* at least one logical CPU and enough memory for the selected calculation.
 
-2) In the MultiPEM_Toolbox directory, create an image
-mpem/<application> specific to the application. For example,
-for <application> = iydt, execute the commands:
+No host R packages, Bash, Unix utilities, Docker Compose, compiler toolchain,
+or application-specific image definitions are required. Building the image or
+refreshing dependencies requires network access. Runs require no network
+access once the image is available locally.
 
-% docker build -f Runfiles-Docker/IYDT-gsrp/Dockerfile -t mpem/iydt .
+`Runfiles-Docker` must remain beside `Runfiles`, `Applications`, `Code`, and
+`Test`:
 
-The Dockerfile will need to be edited to supply application-
-specific code.
+    MultiPEM_Toolbox/
+        Applications/
+        Code/
+        Runfiles/
+        Runfiles-Docker/
+        Test/
 
-3) In the analysis directory, create an image
-<application>/<analysis>. For example, for <application> =
-iydt and <analysis> = seismic, execute the commands:
+On macOS and Windows, configure Docker Desktop to share the repository and
+results locations with its Linux virtual machine. Native Windows users can run
+the `Rscript mpem.R` commands from PowerShell or Command Prompt. A remote
+Docker daemon is supported only when it can access every bind-mounted path at
+exactly the path sent by the client.
 
-% cd IYDT-gsrp/Seismic
-% docker build -t iydt/seismic .
+Run the diagnostic before the first build or whenever the environment changes:
 
-The Dockerfile will need to be edited to supply analysis-
-specific code.
+    Rscript mpem.R doctor
 
-4) Run each sub-analysis from the appropriate directory. For
-example, for <application> = iydt, <analysis> = seismic, and
-<sub-analysis> = I-SUGAR-hob, execute the commands:
+It checks the host R version, repository layout, Docker connection, Linux
+container mode, and runtime-image availability, and reports the Docker server
+version and architecture.
 
-% cd IYDT-gsrp/Seismic/I-SUGAR-hob
-% docker build -t seismic/i-sugar-hob .
-% docker run -it --rm -v <full path to sub-analysis directory>:\
-  <container directory for sub-analysis> -d seismic/i-sugar-hob
+Run the host-side launcher contract checks after changing `mpem.R`, checkpoint
+handling, or the application registry:
+
+    Rscript test-launcher.R
+
+The checks use disposable temporary jobs to verify clean rejection of unsafe
+or unknown analyses, invalid stages and options, incompatible result
+directories, missing or corrupted calibration checkpoints, and malformed
+registries. They do not start a numerical calculation container.
+
+Configuration
+-------------
+
+The launcher accepts these optional environment variables:
+
+* `MPEM_IMAGE` selects the runtime image name and tag. Its default is
+  `mpem/runtime:4.4.3`.
+* `MPEM_RESULTS_ROOT` selects the parent directory for automatically named job
+  directories. Its default is `Runfiles-Docker/results`.
+* `MPEM_VOLUME_LABEL` may be set to `z` or `Z` when bind mounts require an
+  SELinux relabeling option. Leave it unset on other hosts.
+
+Set environment variables using the normal mechanism for the host operating
+system or command environment. Command-line options such as `--results`,
+`--cpus`, and `--memory` apply to a single run.
+
+Build and run
+-------------
+
+From `Runfiles-Docker`:
+
+    Rscript mpem.R build
+    Rscript mpem.R list
+    Rscript mpem.R run IYDT-gsrp/Seismic/I-SUGAR-hob
+
+`list` prints every analysis containing `runMPEM.r` or `runMPEM_0.r` under a
+registered application. `run` prints the container name and results directory.
+Without `--results`, the launcher creates a unique directory under
+`Runfiles-Docker/results` using the analysis name, UTC start time, and process
+ID.
+
+On Unix-like hosts, `./mpem` is an optional `/bin/sh` convenience wrapper for
+`Rscript mpem.R`. The R command is the portable interface on every host.
+
+Jobs run detached unless `--foreground` is supplied. Use the name printed by
+`run` with the lifecycle commands:
+
+    Rscript mpem.R jobs
+    Rscript mpem.R status JOB
+    Rscript mpem.R logs -f JOB
+    Rscript mpem.R wait JOB
+    Rscript mpem.R stop JOB
+    Rscript mpem.R clean JOB
+
+`logs -f` follows live container output. `wait` waits for completion and
+returns the calculation exit code. `stop` terminates a running calculation; it
+does not pause it or create a resumable container state. `clean` removes an
+exited managed container while retaining every result file. Stop or wait for a
+running container before cleaning it.
+
+Containers remain available after completion so their Docker status and logs
+can be inspected. An explicit `--name NAME` must be unique. Remove a completed
+container or choose another name before reusing an explicit name.
+
+Run modes
+---------
+
+The available stages are:
+
+* `full`, the default, runs `runMPEM.r` and then `runMPEM_0.r` when the event
+  deck exists;
+* `calibration` runs only `runMPEM.r`; and
+* `event` restores a pristine calibration workspace and runs only
+  `runMPEM_0.r`.
+
+Examples:
+
+    Rscript mpem.R run APPLICATION/PHENOMENOLOGY/ANALYSIS --stage full
+    Rscript mpem.R run APPLICATION/PHENOMENOLOGY/ANALYSIS --stage calibration
+    Rscript mpem.R run APPLICATION/PHENOMENOLOGY/ANALYSIS --stage event --workspace /path/to/calibration.RData
+
+Use `--results DIR` to choose a job directory. A calibration and its event can
+share one job:
+
+    Rscript mpem.R run IYDT-gsrp/Seismic/I-SUGAR-hob-0 --stage calibration --results results/seismic-case
+    Rscript mpem.R wait JOB
+    Rscript mpem.R run IYDT-gsrp/Seismic/I-SUGAR-hob-0 --stage event --results results/seismic-case
+
+When an event deck is present, a successful calibration must create `.RData`.
+The runner copies it byte-for-byte to:
+
+    RESULTS/.mpem/checkpoints/calibration.RData
+
+The SHA-256 checksum is stored beside the checkpoint. Before every event, both
+the host launcher and container verify that checksum and reject a missing or
+changed checkpoint. The checkpoint is separate from the analysis directory's
+working `.RData`. An event container mounts the checkpoint directory read-only
+and copies the verified checkpoint to the working `.RData` before starting
+`runMPEM_0.r`. Every event invocation therefore starts from the same
+calibration state, even when an earlier event saved changes to its working
+`.RData`.
+
+Retain `RESULTS/.mpem/checkpoints/calibration.RData` and its checksum as the
+pristine benchmark/calibration artifact for future event analyses. Do not
+replace it with the event-modified `.RData` under `RESULTS/work`.
+
+One calibration can seed any number of event cases. First retain a completed
+calibration job:
+
+    Rscript mpem.R run IYDT-gsrp/Seismic/I-SUGAR-hob-0 --stage calibration --results results/seismic-calibration
+    Rscript mpem.R wait JOB
+
+Create each event case under `../Runfiles`, give it a `runMPEM_0.r`, and create
+a separate job from the pristine checkpoint:
+
+    Rscript mpem.R run IYDT-gsrp/Seismic/New-Event-A-0 --stage event --workspace results/seismic-calibration/.mpem/checkpoints/calibration.RData --results results/new-event-a
+
+    Rscript mpem.R run IYDT-gsrp/Seismic/New-Event-B-0 --stage event --workspace results/seismic-calibration/.mpem/checkpoints/calibration.RData --results results/new-event-b
+
+`--workspace` is valid only with `--stage event` while creating a job. It copies
+the supplied file into the new job's checkpoint directory and working analysis
+directory. An event-only case does not need its own `runMPEM.r`.
+
+Dependent MultiPEM optimization inputs
+--------------------------------------
+
+Some multi-phenomenology calibration decks use `opt.RData` files from earlier
+single-phenomenology calculations as optimization starting values. These files
+are different from the calibration `.RData` checkpoint used by `--workspace`.
+The runner does not transfer them between jobs automatically.
+
+Every job is created from a fresh snapshot of canonical `../Runfiles`. After a
+source job succeeds, copy its optimization result from:
+
+    RESULTS/work/APPLICATION/PHENOMENOLOGY/ANALYSIS/opt.RData
+
+to the exact canonical `Runfiles/APPLICATION/MULTIPEM/Opt` filename required by
+the destination deck. For example, after a rapid IYDT seismic job written to
+`results/seismic`, stage its result for the rapid four-phenomenology deck with:
+
+    mkdir -p ../Runfiles/IYDT-gsrp/4-Phen/Opt
+    cp results/seismic/work/IYDT-gsrp/Seismic/I-SUGAR-hob-0/opt.RData \
+      ../Runfiles/IYDT-gsrp/4-Phen/Opt/opt_1_0.RData
+
+Stage every other required phenomenology in the same way, using the filenames
+listed in the destination directory's README. On Windows, create the directory
+and copy the files with File Explorer, `New-Item`/`Copy-Item`, or `mkdir`/`copy`.
+
+Create the dependent Docker job only after all inputs have been staged. Job
+creation captures the populated `Opt` directory; adding files to canonical
+`Runfiles` later cannot change an existing snapshot. `--workspace` cannot be
+used for this handoff because it accepts one calibration workspace only and is
+valid solely with `--stage event`.
+
+Job snapshots and output
+------------------------
+
+Each job contains a private snapshot:
+
+    RESULTS/
+        .mpem/
+            analysis
+            created
+            image-id
+            initial-files.sha256
+            worker-controls.tsv
+            checkpoints/
+                calibration.RData
+                calibration.RData.sha256
+        work/
+            Code/
+            APPLICATION/
+                Code/
+                Data/
+                PHENOMENOLOGY/
+                    ANALYSIS/
+
+The snapshot combines the selected application's canonical input decks,
+application code and data, and application-independent code. The calculation
+writes only into this snapshot and its checkpoint directory. Initial SHA-256
+hashes record the exact prepared inputs, including CPU worker guards. Source
+edits made after job creation cannot change a running job.
+
+The principal console and status files under the selected analysis directory
+are:
+
+    multipem-job.out
+    runMPEM.out
+    runMPEM_0.out
+    runMPEM.cpu-adjustments.log
+    runMPEM_0.cpu-adjustments.log
+    .mpem-runMPEM.status
+    .mpem-runMPEM_0.status
+
+`multipem-job.out` appends every stage invocation and is the durable combined
+log. A deck's `.out` and CPU-adjustment log describe its most recent invocation
+and are replaced when that deck runs again. Files for a deck that has not run
+are absent. Docker retains the same console stream while its managed container
+exists.
+
+Normally, a status file records `running` followed by `complete` or `failed`,
+timestamps, and the exit code. Immediate container termination can leave the
+deck status file at `running`; use `Rscript mpem.R status JOB` for authoritative
+Docker state in that case.
+
+An existing results directory retains its snapshot and working output. The
+launcher rejects reuse with a different analysis or runtime image. Use a new
+results directory for an independent calculation or a clean calibration
+rerun. Reuse a results directory deliberately only when continuing its staged
+calibration/event workflow.
+
+CPU and memory assignment
+-------------------------
+
+Every deck detects the usable CPU capacity visible inside its container. If a
+deck requests more concurrent workers than are available, the effective worker
+pool is reduced and the calculation continues. The warning is written to the
+Docker stream, combined job log, deck log, and CPU-adjustment log. For example:
+
+    MultiPEM CPU adjustment: available CPU count is 8; effective ncores_mc worker assignment reduced from 30 to 8; logical ncores_mc remains 30 to preserve calculation structure
+
+The worker pools associated with `ncores_mle`, `ncores_map`, `ncores_mc`, and
+`ncores_smc` are guarded. Their logical values remain unchanged because some
+calculations use them to define chains, samples, seeds, or initial states. The
+guard changes concurrency without changing the calculation structure.
+
+Use `--cpus N` to impose a lower Docker CPU quota. The worker count is no
+greater than the whole-number capacity represented by that quota and is always
+at least one. Without `--cpus`, the container-visible host or Docker virtual
+machine capacity is used.
+
+Use `--memory SIZE` for a Docker memory ceiling, for example `--memory 16g`.
+Memory requirements cannot be reduced safely through a generic input-deck
+setting, so an insufficient limit can terminate the container.
+
+Numerical reproducibility
+-------------------------
+
+The workflow preserves input-deck random seeds, algorithms, model settings,
+logical task and chain counts, checkpoint order, and saved calculation objects.
+Worker guards are added only to the private snapshot and do not modify
+canonical files under `Code`, `Applications`, or `Runfiles`. The CPU profile
+stores no helper objects in `.RData`.
+
+The runtime also provides:
+
+* R 4.4.3 in a base image pinned by immutable digest;
+* exact package versions in `renv.lock`;
+* versioned source and input snapshots;
+* explicit calibration restoration for event inference; and
+* an object-by-object `.RData` comparator with a default tolerance of `1e-12`.
+
+Compare two calculation workspaces with:
+
+    Rscript mpem.R compare /path/to/run-a/.RData /path/to/run-b/.RData
+    Rscript mpem.R compare /path/to/run-a/.RData /path/to/run-b/.RData 1e-10
+
+The optional third argument is the numerical tolerance.
+
+Runtime verification
+--------------------
+
+The verification command runs global and IYDT application test suites in a
+candidate runtime and an accepted runtime image, then compares their saved
+objects at tolerance `1e-12`. It takes the canonical test runners from
+`../Test` and the IYDT fixtures from `../Applications/Test/IYDT`; each image
+supplies its own shared and application-specific calculation code. The
+verification workspace is temporary and managed entirely by this workflow.
+
+Create the accepted tag while the approved runtime image is selected by
+`MPEM_IMAGE`:
+
+    docker image tag mpem/runtime:4.4.3 mpem/accepted-baseline
+
+When `MPEM_IMAGE` selects another candidate name, use that configured image as
+the source of the accepted tag.
+
+After making a controlled source, dependency, or base-image update, build the
+candidate and run all suites:
+
+    Rscript mpem.R build --no-cache
+    Rscript mpem.R verify
+
+The default accepted image is `mpem/accepted-baseline`. Supply another local
+image name as the final argument when required:
+
+    Rscript mpem.R verify my-registry/multipem:accepted
+
+Run a subset with:
+
+    Rscript mpem.R verify --global-only mpem/accepted-baseline
+    Rscript mpem.R verify --apps-only mpem/accepted-baseline
+
+These suites validate shared calculations, IYDT forward-model code, transform
+and prior derivatives, and the production-data column contracts represented by
+the Data suite. Before production use, also run representative input decks for
+every affected model and compare their workspaces with `mpem.R compare`.
+Stochastic comparisons must use identical seeds and logical calculation
+settings.
+
+Adding an application
+---------------------
+
+An application needs input decks, application code, and a data directory. Use
+this layout, replacing the example names as appropriate:
+
+    ../Runfiles/My-App/Phenomenology/Analysis/runMPEM.r
+    ../Runfiles/My-App/Phenomenology/Analysis/runMPEM_0.r
+    ../Applications/Code/My-App/
+    ../Applications/Data/My-App/
+
+`runMPEM_0.r` is optional. Keep paths used by a deck relative to its analysis
+directory so they resolve inside the job snapshot.
+
+Register the top-level Runfiles name by adding one tab-separated row to
+`applications.tsv`. Its columns select the Runfiles, application-code, and
+application-data directory names:
+
+    runfiles    code           data
+    My-App      Shared-Code    Shared-Data
+
+Code and data names may be shared by multiple Runfiles applications. The
+selected directories under `../Applications/Code` and `../Applications/Data`
+must exist.
+
+Application-wide code is copied to `/work/Runfiles/My-App/Code`, data to
+`/work/Runfiles/My-App/Data`, and shared code to `/work/Runfiles/Code` inside
+the container. When `Applications/Code/My-App/Phenomenology` exists, its
+contents are also made available as `Code` under each immediate phenomenology
+directory in the application snapshot.
+
+Use the standard MultiPEM CPU names in new decks and application code:
+`ncores_mle`, `ncores_map`, `ncores_mc`, and `ncores_smc`. Calculation functions
+should use the corresponding local names `ncor`, `ncor_map`, `ncor_mc`, and
+`ncor_smc`. Supply one of these variables directly as a `future` worker
+argument on the same line:
+
+    plan(parallel_plan, workers=ncor_mc)
+
+Job preparation recognizes these worker arguments, adds the automatic guard,
+and records every guarded location in `RESULTS/.mpem/worker-controls.tsv`.
+Literal counts such as `workers=30` and unrelated variable names are not
+guarded and must not be used for MultiPEM worker plans.
+
+A source-only application addition needs no image rebuild when the required
+packages and system libraries are already present. Confirm discovery and start
+a new detached job:
+
+    Rscript mpem.R list
+    Rscript mpem.R run My-App/Phenomenology/Analysis
+
+If the application needs another R package, add it to `runtime_packages` in
+`docker/create-package-lock.R`, refresh the lock, and rebuild. Add required
+operating-system libraries to `Dockerfile.runtime` before its package-restore
+layer.
+
+Maintenance
+-----------
+
+Package and base-image changes are controlled runtime updates. Before starting
+an update, retain the accepted runtime tag described under Runtime
+verification.
+
+To change the R package set:
+
+1. Edit `runtime_packages` in `docker/create-package-lock.R`.
+2. Run `Rscript mpem.R refresh-lock`; this requires network access and writes
+   `renv.lock`.
+3. Run `Rscript mpem.R build --no-cache`.
+4. Run the verification suites and representative application decks.
+5. Accept the update only when saved calculations agree at the required
+   tolerance.
+
+When changing the base-image digest or system libraries in
+`Dockerfile.runtime`, rebuild without cache and complete the same verification.
+The Dockerfile places dependency restoration before source copies so ordinary
+source rebuilds reuse the expensive dependency layer.
+
+A runtime rebuild changes its image ID. Jobs record their image ID and cannot
+be launched with a different runtime image; create a new results directory for
+the rebuilt runtime.
+
+Troubleshooting
+---------------
+
+Start with:
+
+    Rscript mpem.R doctor
+
+Common diagnostic paths are:
+
+* If Docker is unavailable, start the local engine and confirm the selected
+  Docker context can run Linux containers.
+* If a bind mount is denied, enable repository and results-directory sharing in
+  Docker Desktop or set the required SELinux volume label.
+* If an event reports a missing checkpoint, use the completed calibration
+  job's `.mpem/checkpoints/calibration.RData` with `--workspace` while creating
+  a new event job.
+* If a container name already exists, inspect or clean that managed container,
+  or select another `--name`.
+* If a detached calculation fails, inspect `Rscript mpem.R status JOB`, then
+  the saved `multipem-job.out` and deck-specific output.

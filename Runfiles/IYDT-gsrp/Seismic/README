@@ -1,33 +1,55 @@
-A symbolic link to IYDT phenomenology-specific code needed for
-these analyses should be placed in this directory as follows:
+# IYDT-GSRP seismic analyses
 
-% ln -s ../../../Applications/Code/IYDT-gsrp/Phenomenology/ Code
+These decks infer SUGAR log-yield and HOB from two seismic response channels.
+Both use the shared IYDT data and application code configured in `../README`.
 
-Sub-analysis Directories:
+## Native prerequisite
 
-I-SUGAR-hob-0 - two-stage rapid assessment of W/HOB
-                inference for "new event" SUGAR
-I-SUGAR-hob   - complete assessment of W/HOB inference
-                for "new event" SUGAR
+The seismic coefficient priors are under the application `Phenomenology`
+directory. From this directory create:
 
-*** MULTI-STAGE RAPID ASSESSMENT ***
+```text
+ln -s ../../../Applications/Code/IYDT-gsrp/Phenomenology Code
+```
 
-For rapid assessments in which the calibration inference
-is intended for use in multiple new event inferences:
-1) Go to the directory containing the baseline case:
+## Analyses
 
-% cd I-SUGAR-hob-0
+| Directory | Type | Decks |
+| --- | --- | --- |
+| `I-SUGAR-hob-0` | two-stage rapid assessment | `runMPEM.r`, `runMPEM_0.r` |
+| `I-SUGAR-hob` | complete joint assessment | `runMPEM.r` |
 
-2) Run the runMPEM.r file to calibrate the model parameters
+For the rapid case:
 
-3) Copy the .RData file into the additional case directories
-   upon completion of this run, for example:
+```text
+cd I-SUGAR-hob-0
+R CMD BATCH runMPEM.r runMPEM.out &
+```
 
-% cp .RData ../<additional case directory>/.
+After the background calibration finishes successfully, preserve its workspace
+before starting the event calculation:
 
-4) For each case, run the runMPEM_0.r file to characterize the
-   new event parameters
+```text
+cp .RData .RData-calibration
+R CMD BATCH runMPEM_0.r runMPEM_0.out &
+```
 
-If only one rapid assessment is to be conducted, first run the
-runMPEM.r file and once the job completes, run the runMPEM_0.r
-file.
+`runMPEM.r` writes `opt.RData`; retain it when preparing `2-Phen-sa` or
+`4-Phen` starting values. Retain `.RData-calibration` as the pristine
+benchmark/calibration result for all future event analyses; never replace it
+with the event-modified `.RData`.
+
+For the complete case:
+
+```text
+cd I-SUGAR-hob
+R CMD BATCH runMPEM.r runMPEM.out &
+```
+
+From `Runfiles-Docker`, the corresponding analysis names are
+`IYDT-gsrp/Seismic/I-SUGAR-hob-0` and
+`IYDT-gsrp/Seismic/I-SUGAR-hob`. Docker supplies the local prior code inside
+the snapshot and protects rapid calibration with a pristine checkpoint.
+
+Review `iBayes`, sampler/sample settings, worker counts, and seeds in each deck
+before a production run. A successful batch log ends with `proc.time()`.

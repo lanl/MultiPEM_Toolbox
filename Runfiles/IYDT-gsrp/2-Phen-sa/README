@@ -1,46 +1,55 @@
-A symbolic link to IYDT phenomenology-specific code needed for
-these analyses should be placed in this directory as follows:
+# IYDT-GSRP seismic-acoustic MultiPEM analysis
 
-% ln -s ../../../Applications/Code/IYDT-gsrp/Phenomenology/ Code
+`I-SUGAR-hob-0` is a two-stage rapid assessment that combines seismic and
+acoustic observations to infer SUGAR log-yield and HOB.
 
-Joint analysis with 2 phenomenologies:
-  seismic, acoustic
+## Native prerequisites
 
-Sub-analysis Directory:
+From this directory create the prior-code and optimization directories:
 
-I-SUGAR-hob-0 - two-stage rapid assessment of W/HOB
-                inference for "new event" SUGAR
+```text
+ln -s ../../../Applications/Code/IYDT-gsrp/Phenomenology Code
+mkdir -p Opt
+```
 
-*** MULTI-STAGE RAPID ASSESSMENT ***
+Run the single-phenomenology calibrations first, then stage their MLE results:
 
-For rapid assessments in which the calibration inference
-is intended for use in multiple new event inferences:
-1) Go to the directory containing the baseline case:
+```text
+cp ../Seismic/I-SUGAR-hob-0/opt.RData Opt/opt_1_0.RData
+cp ../Acoustic/I-SUGAR-hob-0/opt.RData Opt/opt_2_0.RData
+```
 
-% cd I-SUGAR-hob-0
+These files are required by the shipped deck's `opt_files_in`; missing or
+misnamed files cause `readRDS` to fail.
 
-2) Run the runMPEM.r file to calibrate the model parameters
+## Run sequence
 
-3) Copy the .RData file into the additional case directories
-   upon completion of this run, for example:
+```text
+cd I-SUGAR-hob-0
+R CMD BATCH runMPEM.r runMPEM.out &
+```
 
-% cp .RData ../<additional case directory>/.
+After the background calibration finishes successfully:
 
-4) For each case, run the runMPEM_0.r file to characterize the
-   new event parameters
+```text
+cp .RData .RData-calibration
+R CMD BATCH runMPEM_0.r runMPEM_0.out &
+```
 
-If only one rapid assessment is to be conducted, first run the
-runMPEM.r file and once the job completes, run the runMPEM_0.r
-file.
+Retain `.RData-calibration` as the pristine MultiPEM calibration for all future
+event analyses; never replace it with the event-modified `.RData`. The
+MultiPEM calibration also writes its own `opt.RData`.
 
-If a more informed starting value for MultiPEM log-likelihood
-optimization is desired:
-1) Create an "Opt" directory
-2) Copy MLE results from each optimal single-phenomenology
-   analysis into this "Opt" directory
-3) Continue with step 1) above
+## Docker
 
-        cp ../Seismic/I-SUGAR-hob-0/opt.RData Opt/opt_1_0.RData
-                                                         seismic
-        cp ../Acoustic/I-SUGAR-hob-0/opt.RData Opt/opt_2_0.RData       
-                                                        acoustic
+Single-phenomenology Docker outputs reside in separate job snapshots. Copy each
+source `opt.RData` from
+`RESULTS/work/IYDT-gsrp/PHENOMENOLOGY/ANALYSIS/opt.RData` to the two canonical
+destinations above, then create the MultiPEM job:
+
+```text
+Rscript mpem.R run IYDT-gsrp/2-Phen-sa/I-SUGAR-hob-0
+```
+
+Do not reuse a single-phenomenology results directory for this analysis; the
+launcher correctly rejects cross-analysis reuse.

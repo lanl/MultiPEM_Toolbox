@@ -1,10 +1,80 @@
-Directories:
+# Application resources
 
-Code/
-	Contains application-specific functions
+`Applications` contains code, immutable data, and verification fixtures that
+are specific to a scientific application. Application-independent statistical
+code belongs in `../Code`; executable input decks belong in `../Runfiles`.
 
-Data/
-	Contains application-specific data files
+## Layout
 
-Test/
-	Contains application-specific verification tests
+```text
+Applications/
+    Code/APPLICATION/
+    Data/APPLICATION/
+    Test/TEST_GROUP/
+```
+
+- `Code` contains forward models, analytical Jacobians, parameter transforms,
+  prior functions, and output-formatting functions.
+- `Data` contains canonical CSV inputs. Runs should treat these files as
+  read-only.
+- `Test` contains application-specific test scripts sourced by runners under
+  `../Test`.
+
+The current Docker application registry maps the run-file group as follows:
+
+| Run-file group | Code directory | Data directory |
+| --- | --- | --- |
+| `IYDT-gsrp` | `IYDT-gsrp` | `IYDT-gsrp` |
+
+`../Runfiles-Docker/applications.tsv` is authoritative. The IYDT verification
+group maps `../Test/IYDT` to `Code/IYDT-gsrp` and `Test/IYDT` through
+`../Test-Docker/test-groups.tsv`.
+
+## Code interface
+
+The supplied application uses these conventional filenames:
+
+- `forward.r` and `forward_0.r` for calibration/complete and event forward
+  models;
+- `jacobian.r` and `jacobian_0.r` for their analytical derivatives;
+- `transform.r` for optional bounded-parameter transformations;
+- `lp_*.r` and `glp_*.r` for log priors and gradients; and
+- `print_sumstats.r` and `print_sumstats_0.r` for application-specific output.
+
+Decks source functions by name, so filenames alone are not the interface. Match
+the function signatures and list structures expected by the corresponding
+`prepro*`, `calc_mle*`, and `calc_bayes*` calls. Keep phenomenology-specific
+prior filenames distinct from application-level filenames. The IYDT
+application places such priors under `Phenomenology`.
+
+Forward models may require packages beyond the shared dependency set. For
+the supplied IYDT application, the shared set is sufficient. Declare any new
+dependencies in the repository README and add them to both Docker lockfiles
+before relying on them.
+
+## Data contract
+
+Each deck identifies calibration and new-event CSV files relative to its
+application `Data` directory. Column names are consumed directly by
+preprocessing and forward-model code. Renaming, rescaling, or reordering data
+without reviewing those consumers can change or break an analysis.
+
+Keep derived results out of `Applications/Data`. Native runs write to their
+analysis directory; Docker runs write to private job snapshots.
+
+## Adding an application
+
+1. Add code under `Code/NAME` and data under `Data/NAME`.
+2. Add canonical decks under `../Runfiles/RUNFILE_GROUP`.
+3. Add a tab-separated row to `../Runfiles-Docker/applications.tsv`.
+4. If tests are supplied, add fixtures under `Test/FIXTURE_GROUP`, runners
+   under `../Test/TEST_GROUP`, and a registry row in
+   `../Test-Docker/test-groups.tsv`.
+5. From `../Runfiles-Docker`, run `Rscript mpem.R doctor` and
+   `Rscript mpem.R list`.
+6. From `../Test-Docker`, run `Rscript testmpem.R doctor` and all applicable
+   suites.
+
+Source-only changes do not require rebuilding a Docker image unless package or
+system-library requirements changed. New jobs snapshot the current canonical
+source.

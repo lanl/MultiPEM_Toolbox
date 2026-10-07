@@ -1,0 +1,12 @@
+**
+!Applications/
+!Applications/**
+!Code/
+!Code/**
+!Runfiles/
+!Runfiles/**
+!Runfiles-Docker/
+!Runfiles-Docker/Dockerfile.runtime
+!Runfiles-Docker/renv.lock
+!Runfiles-Docker/docker/
+!Runfiles-Docker/docker/**

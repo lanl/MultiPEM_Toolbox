@@ -1,43 +1,40 @@
-A symbolic link to IYDT phenomenology-specific code needed for
-these analyses should be placed in this directory as follows:
+# IYDT-GSRP optical analyses
 
-% ln -s ../../../Applications/Code/IYDT-gsrp/Phenomenology/ Code
+These decks infer SUGAR log-yield and HOB from two optical response channels.
+Each assessment has a fixed-benchmark-yield version and an errors-in-variables
+(EIV) version that infers selected benchmark yields.
 
-Sub-analysis Directories:
+## Native prerequisite
 
-I-EIV-SUGAR-hob-0 - two-stage rapid assessment of
-                    W/HOB inference for "new event"
-                    SUGAR, with errors-in-variables
-                    yields for benchmark data
-I-SUGAR-hob-0     - two-stage rapid assessment of W/HOB
-                    inference for "new event" SUGAR, with
-                    fixed yields for benchmark data
-I-EIV-SUGAR-hob   - complete assessment of W/HOB inference
-                    for "new event" SUGAR, with
-                    errors-in-variables yields for
-                    benchmark data
-I-SUGAR-hob       - complete assessment of W/HOB inference
-                    for "new event" SUGAR, with fixed
-                    yields for benchmark data
+Create the optical prior-code link from this directory:
 
-*** MULTI-STAGE RAPID ASSESSMENT ***
+```text
+ln -s ../../../Applications/Code/IYDT-gsrp/Phenomenology Code
+```
 
-For rapid assessments in which the calibration inference
-is intended for use in multiple new event inferences:
-1) Go to the directory containing the baseline case:
+## Analyses
 
-% cd I-EIV-SUGAR-hob-0
+| Directory | Benchmark yield | Type |
+| --- | --- | --- |
+| `I-EIV-SUGAR-hob-0` | EIV | rapid calibration + event |
+| `I-SUGAR-hob-0` | fixed | rapid calibration + event |
+| `I-EIV-SUGAR-hob` | EIV | complete joint assessment |
+| `I-SUGAR-hob` | fixed | complete joint assessment |
 
-2) Run the runMPEM.r file to calibrate the model parameters
+For a rapid case, run `runMPEM.r` in the background, wait for successful
+completion, and always preserve its pristine `.RData` separately (for example,
+as `.RData-calibration`) for future event analyses. Then run `runMPEM_0.r` in
+the background. Complete cases run only `runMPEM.r`.
 
-3) Copy the .RData file into the additional case directories
-   upon completion of this run, for example:
+Each calibration/complete deck writes `opt.RData`. MultiPEM EIV cases require
+the EIV result; fixed-yield cases require the fixed-yield result. Follow the
+exact destination names in `../2-Phen-oc/README` or `../4-Phen/README`.
 
-% cp .RData ../<additional case directory>/.
+Docker analysis names begin `IYDT-gsrp/Optical/`. Docker creates the local prior
+directory in its snapshot and checkpoints rapid calibration. Optimization
+results still have to be staged into canonical MultiPEM `Opt` inputs before a
+dependent Docker job is created.
 
-4) For each case, run the runMPEM_0.r file to characterize the
-   new event parameters
-
-If only one rapid assessment is to be conducted, first run the
-runMPEM.r file and once the job completes, run the runMPEM_0.r
-file.
+EIV is a model choice with scientific consequences. Verify the selected
+directory, `eiv` settings, prior configuration, sampler, worker counts, and
+seeds before running.

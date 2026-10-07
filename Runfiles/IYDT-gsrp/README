@@ -1,54 +1,101 @@
-Symbolic links to IYDT-specific data and code needed for
-each analysis should be placed in this directory as follows:
+# IYDT-GSRP example application
 
-% ln -s ../../Applications/Data/IYDT-gsrp/ Data
-% ln -s ../../Applications/Code/IYDT-gsrp/ Code
+This is the four-phenomenology application documented by the MultiPEM user
+manual, methodology report, and associated journal article. It estimates the
+log-yield (`W`) and, where supported, height of burst (`HOB`) of the SUGAR event
+from seismic, acoustic, optical, and crater observations.
 
-The data supporting the IYDT analyses were provided by Sean Ford
-of Lawrence Livermore National Laboratory and can be found in
-the Data/ directory.
+Chemical explosions calibrate the supplied seismic and acoustic models;
+nuclear explosions calibrate the optical and crater models. The seismic,
+acoustic, and optical source data were provided by Sean Ford of Lawrence
+Livermore National Laboratory.
 
-The Code/ directory contains functions utilized in the IYDT
-analyses, including forward models for each phenomenology
-and their associated gradients.
+## Native setup
 
-Four phenomenologies are considered: Seismic, Acoustic, Optical, and
-Crater. The first three of these were considered by Ford and
-colleagues in their work referenced below. Chemical explosions are
-used to calibrate seismic and acoustic models, while nuclear
-explosions are used to calibrate optical and crater models. The
-nuclear event "SUGAR" is considered as the "new event" whose
-yield and height-of-burst are to be predicted with uncertainty.
+First create `Runfiles/Code` as described in `../README`. From this directory,
+create the application links:
 
-Phenomenology-specific code filenames should be distinct from
-application-specific code filenames.
+```text
+ln -s ../../Applications/Data/IYDT-gsrp Data
+ln -s ../../Applications/Code/IYDT-gsrp Code
+```
 
-Directories:
+Before running Seismic, Optical, Crater, or a MultiPEM directory, create its
+local phenomenology-prior link exactly as shown in that directory's README.
+Docker jobs do not require these canonical links; the launcher prepares
+equivalent snapshot directories.
 
-Seismic/
-Acoustic/
-Optical/
-Crater/
-	Single-phenomenology analyses
-2-Phen-sa/
-	MultiPEM analysis based on seismic and acoustic
-2-Phen-oc/
-	MultiPEM analysis based on optical and crater
-4-Phen/
-	MultiPEM analysis based on seismic, acoustic, optical,
-        and crater
-Plots/
-	Code for generating plots of complete analysis results
+## Directory inventory
 
-Reference:
+| Directory | Phenomenologies | Parameters | Assessments |
+| --- | --- | --- | --- |
+| `Seismic` | seismic | `W`, `HOB` | rapid and complete |
+| `Acoustic` | acoustic | `W`, `HOB` | rapid and complete |
+| `Optical` | optical | `W`, `HOB` | rapid and complete, fixed-yield and EIV calibration |
+| `Crater` | crater | `W` | rapid and complete, fixed-yield and EIV calibration |
+| `2-Phen-sa` | seismic + acoustic | `W`, `HOB` | rapid |
+| `2-Phen-oc` | optical + crater | `W`, `HOB` | rapid, fixed-yield and EIV calibration |
+| `4-Phen` | all four | `W`, `HOB` | rapid and complete, fixed-yield and EIV calibration |
+| `Plots` | postprocessing | — | complete-analysis figures |
 
-	Ford, S.R., Bulaevskaya, V., Ramirez, A., Johannesson, G.,
-	and Rodgers, A.J. (2021). Joint Bayesian inference for
-	near-surface explosion yield and height-of-burst. Journal
-	of Geophysical Research: Solid Earth, 126, e2020JB020968.
+Directory-name conventions:
 
-NOTE: The option "iBayes = TRUE" is set by default in each of
-the "runMPEM.r" files provided for this application. This
-option runs Bayesian analyses in addition to maximum
-likelihood estimation (MLE). For faster runs, use only MLE
-by setting "iBayes = FALSE"
+- `I` identifies the illustrated model configuration;
+- `EIV` enables errors-in-variables benchmark yields;
+- `SUGAR` identifies the new event;
+- `hob` indicates that HOB is inferred with log-yield; and
+- a trailing `-0` identifies a two-stage rapid assessment containing both
+  `runMPEM.r` and `runMPEM_0.r`.
+
+## Recommended run order
+
+For MultiPEM analyses, run the required single-phenomenology calibrations first
+and retain their `opt.RData` files. Create and populate the MultiPEM `Opt`
+directory using the exact filenames in its README. The shipped MultiPEM decks
+hard-code these files and fail if they are absent.
+
+For a rapid analysis:
+
+1. run `runMPEM.r` and wait for successful completion;
+2. always preserve the pristine calibration `.RData` separately (for example,
+   as `.RData-calibration`) for future event analyses; and
+3. run `runMPEM_0.r` from a workspace containing that calibration.
+
+For a complete analysis, run only its `runMPEM.r`; benchmark and event
+quantities are inferred jointly.
+
+The supplied calibration and complete decks select RAM sampling. Rapid event
+decks select FME by default. These are scientific input choices, not
+R-version fallback rules. Set `iBayes = FALSE` before a run when only MLE output
+is required, and review all sample and worker counts before production use.
+
+## Docker examples
+
+From `../../Runfiles-Docker`:
+
+```text
+Rscript mpem.R run IYDT-gsrp/Seismic/I-SUGAR-hob-0
+Rscript mpem.R run IYDT-gsrp/4-Phen/I-EIV-SUGAR-hob
+```
+
+A Docker job snapshots the whole IYDT-GSRP application. When preparing a
+MultiPEM job, copy `opt.RData` out of each completed single-phenomenology job
+into this canonical tree's required `Opt` destinations *before* creating the
+MultiPEM job. See `../../Runfiles-Docker/README` for exact snapshot locations,
+stage checkpoints, job lifecycle commands, and CPU controls.
+
+## Inputs and outputs
+
+Canonical CSV files are documented in
+`../../Applications/Data/IYDT-gsrp/README`. Native outputs remain in the
+analysis directory; Docker outputs remain in the printed results snapshot.
+Successful batch transcripts end with `proc.time()` output. Important files
+include `.RData`, `opt.RData`, `opt_nev.RData`, `runMPEM.out`, and
+`runMPEM_0.out` where enabled.
+
+## Reference
+
+Ford, S. R., Bulaevskaya, V., Ramirez, A., Johannesson, G., and Rodgers,
+A. J. (2021). Joint Bayesian inference for near-surface explosion yield and
+height-of-burst. *Journal of Geophysical Research: Solid Earth*, 126,
+e2020JB020968.

@@ -1,0 +1,7 @@
+# IYDT data fixtures
+
+These small, immutable fixtures contain the header and first two data records
+from the files of the same name in `Applications/Data/IYDT-gsrp` (or the only
+record when the source file has one). They were copied on 2026-09-26 for schema
+and application-integration checks. They are test inputs only and must not
+replace the complete production datasets.

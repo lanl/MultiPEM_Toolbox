@@ -1,3 +1,39 @@
-Data for seismic, acoustic, and optical phenomenologies
-provided by Sean Ford,
-Lawrence Livermore National Laboratory
+# IYDT-GSRP input data
+
+These CSV files support the seismic, acoustic, optical, and crater analyses
+under `../../../Runfiles/IYDT-gsrp`. The seismic, acoustic, and optical data
+were provided by Sean Ford of Lawrence Livermore National Laboratory. The
+repository publications and user manual provide scientific provenance and
+units.
+
+## Files
+
+| File | Rows | Role | Principal columns |
+| --- | ---: | --- | --- |
+| `seismic_cal.csv` | 392 | benchmark calibration | `Y1`, `Y2`, source/path/station identifiers, type, log range, yield, C2N, HOB |
+| `seismic_new.csv` | 3 | SUGAR new event | same seismic responses and covariates, without C2N |
+| `acoustic_cal.csv` | 411 | benchmark calibration | `Y1`, `Y2`, source/path/station identifiers, type, scaled temperature/pressure, log range, yield, C2N, HOB |
+| `acoustic_new.csv` | 5 | SUGAR new event | acoustic responses and covariates, without C2N |
+| `optical_cal.csv` | 25 | benchmark calibration | `Y1`, `Y2`, source, scaled temperature/pressure, yield, HOB |
+| `optical_new.csv` | 1 | SUGAR new event | optical responses and covariates |
+| `crater_cal.csv` | 6 | benchmark calibration | `Y1`, `Y2`, source, yield, HOB |
+| `crater_new.csv` | 1 | SUGAR new event | crater responses and covariates |
+
+Counts exclude the header row. `W` is log-yield in the supplied decks;
+`lRange`, `logTempSc`, and `logPressureSc` are already transformed inputs.
+Do not apply a second transformation when using the canonical forward models.
+
+## Use and maintenance
+
+Run decks refer to these files by basename beneath their configured data root.
+Treat them as immutable inputs. If a dataset changes:
+
+1. retain the exact header names expected by preprocessing and application
+   code;
+2. review every IYDT deck that references the file;
+3. rerun `Test-Docker` suites `IYDT/Seismic`, `IYDT/Acoustic`,
+   `IYDT/Optical`, and `IYDT/Crater`; and
+4. create new Docker analysis jobs so their input snapshots include the change.
+
+Generated workspaces, optimization files, logs, and plots do not belong in this
+directory.
