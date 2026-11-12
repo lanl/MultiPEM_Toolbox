@@ -25,6 +25,14 @@ glprior = function(x, pc)
   # use R Matrix package
   require(Matrix)
 
+  # Full length of the returned gradient (== length of the input parameter
+  # vector). Used to emit a correctly-sized NaN gradient if the observational-
+  # error covariance reparameterization becomes singular at this point (see the
+  # guarded solve(Jac_c) below): NUTS then treats the leaf as divergent and
+  # rejects the step, exactly as the log-prior VALUE returns -Inf there
+  # (log_prior.r) and the fused path returns grad=NaN (fused_likelihood_cal.r).
+  n_grad_in = length(x)
+
   # extract scale parameters for variance component priors
   pnames0 = names(pc)
   if( !("A" %in% pnames0) ){
@@ -349,7 +357,15 @@ glprior = function(x, pc)
         }
       }
     }
-    IJac_c = solve(Jac_c)
+    # Jac_c is (lower-)triangular in the Cholesky factor L_h and becomes singular
+    # exactly when an observational-error variance collapses (L_h[r,r] -> 0). That
+    # is a measure-zero boundary of the support where the density is effectively
+    # -Inf (the log-prior VALUE in log_prior.r returns -Inf there via
+    # determinant()). Rather than let the Matrix solve() abort the whole run, emit
+    # a NaN gradient so NUTS treats the leaf as divergent and rejects the step --
+    # matching the grad=NaN reject contract in fused_likelihood_cal.r.
+    IJac_c = tryCatch(solve(Jac_c), error = function(e) NULL)
+    if( is.null(IJac_c) ){ return(rep(NaN, n_grad_in)) }
     gr_eps_mat = matrix(0,Rh,Rh)
     for( q in 1:Rh ){
       for( p in 1:q ){

@@ -23,6 +23,23 @@
 
 print_ss_0 = function(xfin, pc, ci=NULL, levels=NULL)
 {
+  # Standard deviation from a vector of variances (the diagonal of an
+  # information-matrix inverse). Returns NA for negative/non-finite "variances"
+  # (ill-conditioned information) instead of emitting sqrt() NaN warnings, and
+  # notes it once. See conditioning_report.r for which directions are the cause.
+  safe_sd = function(v)
+  {
+    v = as.numeric(v)
+    bad = !is.finite(v) | v < 0
+    out = rep(NA_real_, length(v))
+    out[!bad] = sqrt(v[!bad])
+    if( any(bad) ){
+      print(paste("SE undefined (ill-conditioned information) for ",
+                  sum(bad)," parameter(s); see conditioning report.",sep=""))
+    }
+    out
+  }
+
   # objects in pc
   pnames = names(pc)
 
@@ -116,7 +133,7 @@ print_ss_0 = function(xfin, pc, ci=NULL, levels=NULL)
       if( pc$Sigma_mle_0$acov_0 >= 1 ){
         print("STANDARD DEVIATION FIXED MODEL PARAMETERS: ")
         cat("\n")
-        theta0_sd_0 = sqrt(diag(pc$Sigma_mle_0$II_nev_0))
+        theta0_sd_0 = safe_sd(diag(pc$Sigma_mle_0$II_nev_0))
         names(theta0_sd_0) = pc$theta_names
         print(round(theta0_sd_0,2))
         cat("\n")
@@ -133,7 +150,7 @@ print_ss_0 = function(xfin, pc, ci=NULL, levels=NULL)
       if( pc$Sigma_mle_0$acov_0 == 2 ){
         print("STANDARD DEVIATION: ")
         cat("\n")
-        theta0_sd = sqrt(diag(pc$Sigma_mle_0$II_nev))
+        theta0_sd = safe_sd(diag(pc$Sigma_mle_0$II_nev))
         names(theta0_sd) = pc$theta_names
         print(round(theta0_sd,2))
         cat("\n")
@@ -153,9 +170,9 @@ print_ss_0 = function(xfin, pc, ci=NULL, levels=NULL)
           if( pc$Sigma_mle_0$acov_0 >= 1 ){
             if( iit ){
               lb_0 = theta0_it -
-                     z_alpha*sqrt(diag(pc$Sigma_mle_0$II_nev_0_it))
+                     z_alpha*safe_sd(diag(pc$Sigma_mle_0$II_nev_0_it))
               ub_0 = theta0_it +
-                     z_alpha*sqrt(diag(pc$Sigma_mle_0$II_nev_0_it))
+                     z_alpha*safe_sd(diag(pc$Sigma_mle_0$II_nev_0_it))
               if( exists("itransform",where=pc,inherits=FALSE) ){
                 if( pc$itransform ){
                   bmat = rbind(lb_0,ub_0)
@@ -181,9 +198,9 @@ print_ss_0 = function(xfin, pc, ci=NULL, levels=NULL)
               }
             } else {
               lb_0 = theta0 -
-                     z_alpha*sqrt(diag(pc$Sigma_mle_0$II_nev_0))
+                     z_alpha*safe_sd(diag(pc$Sigma_mle_0$II_nev_0))
               ub_0 = theta0 +
-                     z_alpha*sqrt(diag(pc$Sigma_mle_0$II_nev_0))
+                     z_alpha*safe_sd(diag(pc$Sigma_mle_0$II_nev_0))
             }
             print(paste(100*ci[qq],"%: ",
                         "CONFIDENCE INTERVAL FIXED MODEL PARAMETERS:",
@@ -197,9 +214,9 @@ print_ss_0 = function(xfin, pc, ci=NULL, levels=NULL)
           if( pc$Sigma_mle_0$acov_0 == 2 ){
             if( iit ){
               lb = theta0_it -
-                   z_alpha*sqrt(diag(pc$Sigma_mle_0$II_nev_it))
+                   z_alpha*safe_sd(diag(pc$Sigma_mle_0$II_nev_it))
               ub = theta0_it +
-                   z_alpha*sqrt(diag(pc$Sigma_mle_0$II_nev_it))
+                   z_alpha*safe_sd(diag(pc$Sigma_mle_0$II_nev_it))
               if( exists("itransform",where=pc,inherits=FALSE) ){
                 if( pc$itransform ){
                   bmat = rbind(lb,ub)         
@@ -224,8 +241,8 @@ print_ss_0 = function(xfin, pc, ci=NULL, levels=NULL)
                 ub = pc$transform(ub, pc=pc)
               }
             } else {
-              lb = theta0 - z_alpha*sqrt(diag(pc$Sigma_mle_0$II_nev))
-              ub = theta0 + z_alpha*sqrt(diag(pc$Sigma_mle_0$II_nev))
+              lb = theta0 - z_alpha*safe_sd(diag(pc$Sigma_mle_0$II_nev))
+              ub = theta0 + z_alpha*safe_sd(diag(pc$Sigma_mle_0$II_nev))
             }
             print(paste(100*ci[qq],"%: ","CONFIDENCE INTERVAL:",sep=""))
             cat("\n")
@@ -255,7 +272,7 @@ print_ss_0 = function(xfin, pc, ci=NULL, levels=NULL)
       if( pc$Sigma_mle_0$acov_cal && !pc$iPrior ){
         print("STANDARD DEVIATION: ")
         cat("\n")
-        calp_sd = sqrt(diag(pc$Sigma_mle_0$II_calp))
+        calp_sd = safe_sd(diag(pc$Sigma_mle_0$II_calp))
         names(calp_sd) = pc$cal_par_names
         print(round(calp_sd,2))
         cat("\n")
@@ -271,8 +288,8 @@ print_ss_0 = function(xfin, pc, ci=NULL, levels=NULL)
         if( !is.null(ci) ){
           for( qq in 1:length(ci) ){
             z_alpha = qnorm((1-ci[qq])/2,lower.tail=FALSE)
-            lb = calp - z_alpha*sqrt(diag(pc$Sigma_mle_0$II_calp))
-            ub = calp + z_alpha*sqrt(diag(pc$Sigma_mle_0$II_calp))
+            lb = calp - z_alpha*safe_sd(diag(pc$Sigma_mle_0$II_calp))
+            ub = calp + z_alpha*safe_sd(diag(pc$Sigma_mle_0$II_calp))
             print(paste(100*ci[qq],"%: ","CONFIDENCE INTERVAL:",sep=""))
             cat("\n")
             ci_mat = rbind(lb,ub)

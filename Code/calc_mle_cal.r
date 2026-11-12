@@ -68,6 +68,9 @@ calc_mle_cal = function(p_cal,gdir,adir,f,nst=10,ncor=1,ci_lev=0.95,
 
   # Global
   # log-likelihood functions
+  # diagnostics: parameter labels + information-matrix conditioning report
+  source(paste(gdir,"/param_labels.r",sep=""),local=TRUE)
+  source(paste(gdir,"/conditioning_report.r",sep=""),local=TRUE)
   source(paste(gdir,"/log_likelihood_cal.r",sep=""),local=TRUE)
   source(paste(gdir,"/log_likelihood_eiv.r",sep=""),local=TRUE)
   source(paste(gdir,"/log_likelihood_full.r",sep=""),local=TRUE)

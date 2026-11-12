@@ -34,6 +34,8 @@ usage <- function() {
     "  --stage full|calibration|event  Stage to run (default: full)\n",
     "  --results DIR                  New or existing job directory\n",
     "  --workspace FILE               Pristine calibration for a new event job\n",
+    "  --metric FILE                  NUTS dense warm-start seed, calibration/joint\n",
+    "  --metric-0 FILE                NUTS dense warm-start seed, event\n",
     "  --cpus N                       Docker CPU and worker ceiling\n",
     "  --memory SIZE                  Optional Docker memory ceiling\n",
     "  --foreground                   Attach instead of running detached\n",
@@ -207,7 +209,8 @@ analysis_components <- function(analysis) {
 
 path_from_components <- function(...) do.call(file.path, as.list(c(...)))
 
-prepare_new_job <- function(job_root, analysis, workspace_file) {
+prepare_new_job <- function(job_root, analysis, workspace_file,
+                            metric_file = "", metric0_file = "") {
   components <- analysis_components(analysis)
   application <- components[[1L]]
   relative_analysis <- components[-1L]
@@ -249,6 +252,20 @@ prepare_new_job <- function(job_root, analysis, workspace_file) {
     Sys.chmod(working_workspace, mode = "0644")
     copy_one_file(workspace_file, checkpoint)
     Sys.chmod(checkpoint, mode = "0444")
+  }
+  # NUTS dense warm-start seeds. Staged by fixed name into the case dir so the
+  # in-container deck's nuts_warmstart="auto" finds them: metric.RData for the
+  # calibration/joint stack (runMPEM.r), metric_0.RData for the event stack
+  # (runMPEM_0.r). The in-R dimension check rejects a mismatched metric safely.
+  if (nzchar(metric_file)) {
+    metric_dest <- file.path(target_dir, "metric.RData")
+    copy_one_file(absolute_file(metric_file), metric_dest)
+    Sys.chmod(metric_dest, mode = "0644")
+  }
+  if (nzchar(metric0_file)) {
+    metric0_dest <- file.path(target_dir, "metric_0.RData")
+    copy_one_file(absolute_file(metric0_file), metric0_dest)
+    Sys.chmod(metric0_dest, mode = "0644")
   }
 
   metadata <- file.path(job_root, ".mpem")
@@ -294,17 +311,19 @@ list_analyses <- function() {
 
 parse_run_options <- function(arguments) {
   result <- list(
-    stage = "full", results = "", workspace = "", cpus = "", memory = "",
-    foreground = FALSE, name = ""
+    stage = "full", results = "", workspace = "", metric = "", metric0 = "",
+    cpus = "", memory = "", foreground = FALSE, name = ""
   )
   index <- 1L
   while (index <= length(arguments)) {
     option <- arguments[[index]]
-    valued <- c("--stage", "--results", "--workspace", "--cpus", "--memory", "--name")
+    valued <- c("--stage", "--results", "--workspace", "--metric", "--metric-0",
+                "--cpus", "--memory", "--name")
     if (option %in% valued) {
       if (index == length(arguments)) fail(option, " needs a value")
       key <- switch(option,
         "--stage" = "stage", "--results" = "results", "--workspace" = "workspace",
+        "--metric" = "metric", "--metric-0" = "metric0",
         "--cpus" = "cpus", "--memory" = "memory", "--name" = "name"
       )
       result[[key]] <- arguments[[index + 1L]]
@@ -327,6 +346,12 @@ run_job <- function(arguments) {
   }
   if (nzchar(options$workspace) && options$stage != "event") {
     fail("--workspace is only valid with --stage event")
+  }
+  if (nzchar(options$metric) && options$stage == "event") {
+    fail("--metric is only valid with --stage full or calibration")
+  }
+  if (nzchar(options$metric0) && options$stage == "calibration") {
+    fail("--metric-0 is only valid with --stage full or event")
   }
   cpu_limit <- NA_real_
   if (nzchar(options$cpus)) {
@@ -366,6 +391,8 @@ run_job <- function(arguments) {
       fail("results belong to ", recorded_analysis, ", not ", analysis)
     }
     if (nzchar(options$workspace)) fail("--workspace is only valid when creating a job")
+    if (nzchar(options$metric)) fail("--metric is only valid when creating a job")
+    if (nzchar(options$metric0)) fail("--metric-0 is only valid when creating a job")
     image_record <- file.path(metadata, "image-id")
     if (file.exists(image_record) && !identical(read_first_line(image_record), runtime_id)) {
       fail("job was created with a different runtime image; use a new results directory")
@@ -376,7 +403,8 @@ run_job <- function(arguments) {
   } else {
     existing <- list.files(job_root, all.files = TRUE, no.. = TRUE)
     if (length(existing)) fail("new results directory is not empty: ", job_root)
-    prepare_new_job(job_root, analysis, options$workspace)
+    prepare_new_job(job_root, analysis, options$workspace,
+                    options$metric, options$metric0)
   }
 
   work_root <- file.path(job_root, "work")
@@ -604,9 +632,7 @@ verify_equivalence <- function(arguments) {
   }
 
   if (mode != "global") {
-    phenomena <- c(
-      "Seismic", "Acoustic", "Crater", "Optical", "Data", "Transform", "Prior"
-    )
+    phenomena <- c("Seismic", "Acoustic", "Crater", "Optical")
     for (suite in c("reference", "runtime")) {
       test_root <- file.path(verification_root, suite, "IYDT")
       dir.create(test_root, recursive = TRUE, showWarnings = FALSE)

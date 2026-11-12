@@ -151,20 +151,20 @@ A nested group also receives its registered application code and fixtures:
 For a `Runfile`, `Bayes`, `Bayes-Backends`, `MultiPhenomenology`, `Parallel`,
 `Prediction`, `Profile`, or `Imputation`
 suite, the snapshot also contains only the registered smoke case plus the
-shared code, IYDT code, crater prior code, and data needed by that case.
-`Runfile` reduces the copied deck to one MLE start, one worker, one event
-imputation, and no Bayesian phase. `Bayes` instead uses fixed seeds, one
-worker, short burn-in and sampling chains, and numerical derivative
+shared code, IYDT code, crater prior code, and data needed by that case. A
+`Runfile` suite reduces the copied deck to one MLE start, one worker, one event
+imputation, and no Bayesian phase. A `Bayes` suite instead uses fixed seeds,
+one worker, short burn-in and sampling chains, and numerical derivative
 assertions. `Bayes-Backends` executes bounded real-application RAM and NUTS
 chains. `Parallel` compares deterministic one-worker and two-worker workflows.
 `Prediction` directly validates fitted/observed and covariance output from
 `predict.r`; `Profile` runs a reduced five-point profile-likelihood workflow.
 `Imputation` runs two calibration-draw event analyses through RAM and SMC and
 checks pooled posterior dimensions and per-imputation diagnostics.
-The `MultiPhenomenology` suite additionally stages the optical and crater
+The IYDT `MultiPhenomenology` suite additionally stages the optical and crater
 single-phenomenology cases, then uses their generated optimization files in a
 combined workflow. In every case only the private snapshot is edited; the
-repository runfile is not changed.
+repository runfile is never changed.
 
 The test executes from its suite directory in the snapshot. Canonical source
 files are copied with their relative layout intact, then worker-pool calls in
@@ -268,8 +268,8 @@ To add an entirely new test group:
 2. Put application code under `Applications/Code/CODE_DIRECTORY`.
 3. Put shared test fixtures under `Applications/Test/FIXTURE_DIRECTORY`.
 4. Add exactly one tab-separated row to `test-groups.tsv`. Use `-` when no
-   secondary code tree is needed; the last three fields select the runfile
-   family, relative smoke-case directory, and application data:
+   secondary application-code tree is required. The last three fields select
+   the runfile family, relative smoke-case directory, and application data:
 
        tests  code  fixtures  secondary_code  smoke_runfiles  smoke_case  smoke_data
        GROUP  CODE  FIXTURES  -               RUNFILES        PATH        DATA
@@ -279,14 +279,17 @@ To add an entirely new test group:
 
 The `tests` value must equal the top-level directory below `Test`. The `code`
 and `fixtures` values name directories below `Applications/Code` and
-`Applications/Test`. In the snapshot these are placed at
-`Test/GROUP/Code` and `Test/GROUP/Test`, respectively. The smoke fields
-identify paths below `Runfiles` and `Applications/Data` and are copied only
-for a runfile integration suite. The currently recognized integration suite
-names are `Runfile`, `Bayes`, `Bayes-Backends`, `MultiPhenomenology`,
-`Parallel`, `Prediction`, `Profile`, and `Imputation`.
-`MultiPhenomenology` staging also copies its optical and
-two-phenomenology runfile cases.
+`Applications/Test`. In the snapshot these are placed at `Test/GROUP/Code`
+and `Test/GROUP/Test`, respectively. A non-`-` `secondary_code` value names a
+second directory below `Applications/Code`; it is copied to
+`Test/GROUP/Code-SECONDARY_CODE`. This supports compatibility tests without
+duplicating application source. `smoke_runfiles`, `smoke_case`, and
+`smoke_data` identify paths below `Runfiles`, the chosen runfile family, and
+`Applications/Data`; they are copied only for a runfile integration suite.
+The currently recognized integration suite names are `Runfile`, `Bayes`,
+`Bayes-Backends`, `MultiPhenomenology`, `Parallel`, `Prediction`, `Profile`,
+and `Imputation`. IYDT's `MultiPhenomenology` staging also copies its
+optical and two-phenomenology runfile cases.
 
 To add another application-independent test, edit `Test/tests.r` or files it
 sources from `Code`. The `global` job always snapshots the complete `Code`

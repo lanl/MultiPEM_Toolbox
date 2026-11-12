@@ -30,10 +30,98 @@
 
 using namespace Rcpp;
 using Eigen::VectorXd;
+using Eigen::MatrixXd;
 
 // Signatures for compiled targets passed via XPtr.
 typedef double     (*logdens_fn)(const VectorXd& theta);
 typedef VectorXd   (*grad_fn)   (const VectorXd& theta);
+
+// ---------------------------------------------------------------------------
+// Metric (mass matrix) abstraction.
+//
+// Convention: we store inv_M == M^{-1}, the inverse mass matrix, which equals
+// the (estimated) posterior covariance. Momentum is drawn r ~ N(0, M), so the
+// kinetic energy is 0.5 r' M^{-1} r and the leapfrog drift is M^{-1} r.
+//
+// Two forms share one interface so the tree/leapfrog code is written once:
+//   * DIAGONAL: inv_M held as a length-d vector of variances (Stan diag_e).
+//               Arithmetic is op-for-op identical to the original diagonal
+//               implementation, and sample() consumes norm_rand() in the exact
+//               same order, so the diagonal path stays BITWISE-identical.
+//   * DENSE:    inv_M held as a d x d SPD covariance (Stan dense_e). A Cholesky
+//               inv_M = L L' is cached once at construction and reused by every
+//               momentum draw.
+//
+// Three operations are used by the sampler:
+//   apply(r)  -> M^{-1} r         (leapfrog drift, U-turn checks)
+//   quad(r)   -> r' M^{-1} r      (kinetic energy)
+//   sample()  -> r ~ N(0, M)      (momentum refresh)
+//
+// Dense momentum draw: we hold inv_M = M^{-1} = L L' (L lower). We need
+// r ~ N(0, M) = N(0, (L L')^{-1}). With z ~ N(0, I), set r = L^{-T} z. Then
+// Cov(r) = L^{-T} L^{-1} = (L L')^{-1} = M. In Eigen, L' is matrixU(), so
+// r = matrixU().solve(z) (solves L' r = z). Using matrixL() here would give
+// Cov(r) = M^{-1}, a silent error.
+// ---------------------------------------------------------------------------
+struct Metric {
+  bool     is_diagonal;
+  VectorXd diag;                 // diagonal case: inv_M (variances)
+  MatrixXd dense;                // dense case: inv_M (covariance)
+  Eigen::LLT<MatrixXd> llt;      // dense case: Cholesky of inv_M (= L L')
+
+  // Diagonal constructor.
+  explicit Metric(const VectorXd& inv_M_diag)
+    : is_diagonal(true), diag(inv_M_diag) {}
+
+  // Dense constructor: factor inv_M once, with a ridge fallback if the incoming
+  // matrix is not numerically positive-definite (e.g. noisy early-warmup
+  // estimate). Mirrors the jittered-chol pattern used elsewhere in the toolbox
+  // (observed_information_cal.r).
+  explicit Metric(const MatrixXd& inv_M_dense)
+    : is_diagonal(false), dense(inv_M_dense) {
+    llt.compute(dense);
+    if (llt.info() != Eigen::Success) {
+      double ridge = 1e-10 * dense.diagonal().cwiseAbs().maxCoeff();
+      if (!(ridge > 0.0)) ridge = 1e-10;
+      for (int attempt = 0; attempt < 30 && llt.info() != Eigen::Success;
+           ++attempt) {
+        dense.diagonal().array() += ridge;
+        llt.compute(dense);
+        ridge *= 10.0;
+      }
+      if (llt.info() != Eigen::Success)
+        Rcpp::stop("Metric: inv_M not positive-definite after regularization.");
+    }
+  }
+
+  int size() const { return is_diagonal ? (int)diag.size() : (int)dense.rows(); }
+
+  // M^{-1} r
+  inline VectorXd apply(const VectorXd& r) const {
+    if (is_diagonal) return (diag.array() * r.array()).matrix();
+    return dense * r;
+  }
+
+  // r' M^{-1} r
+  inline double quad(const VectorXd& r) const {
+    if (is_diagonal) return (diag.array() * r.array().square()).sum();
+    return r.dot(dense * r);
+  }
+
+  // Draw r ~ N(0, M). The standard-normal z is drawn in a 0..d-1 loop in BOTH
+  // branches so the R RNG stream is consumed identically to the original
+  // diagonal code (which did r[i] = norm_rand()/sqrt(inv_M[i])).
+  inline VectorXd sample() const {
+    const int d = size();
+    VectorXd z(d);
+    for (int i = 0; i < d; ++i) z[i] = ::norm_rand();
+    if (is_diagonal) {
+      for (int i = 0; i < d; ++i) z[i] /= std::sqrt(diag[i]);
+      return z;
+    }
+    return llt.matrixU().solve(z);   // r = L^{-T} z  =>  Cov(r) = M
+  }
+};
 
 // ---------------------------------------------------------------------------
 // Target abstraction. A Target bundles a log-density and its gradient behind
@@ -72,8 +160,7 @@ struct Target {
 // the next step's incoming gradient. Over a trajectory this uses one gradient
 // evaluation per step rather than two.
 //
-// inv_M is the diagonal of the inverse mass matrix (== 1 / M_diag), i.e. the
-// momentum covariance we sample from is M = diag(1/inv_M).
+// The metric carries M^{-1}; the momentum covariance we sample from is M.
 // ---------------------------------------------------------------------------
 // Returns the log-density at the new theta. When the target is NOT fused this
 // is NaN (the caller then computes f() itself, preserving the original call
@@ -81,9 +168,9 @@ struct Target {
 // single evaluation and logp is returned so the base case need not call f again.
 static inline double leapfrog(Target& tgt,
                               VectorXd& theta, VectorXd& r, VectorXd& grad,
-                              double eps, const VectorXd& inv_M) {
+                              double eps, const Metric& metric) {
   r.noalias() += 0.5 * eps * grad;            // half momentum kick (reuses grad)
-  theta.noalias() += eps * (inv_M.array() * r.array()).matrix();  // full drift
+  theta.noalias() += eps * metric.apply(r);   // full drift: eps * M^{-1} r
   double logp = std::numeric_limits<double>::quiet_NaN();
   if (tgt.has_fused) {
     logp = tgt.fg(theta, grad);               // one fused eval: grad + logp
@@ -96,13 +183,13 @@ static inline double leapfrog(Target& tgt,
 
 // Joint log-density (negative Hamiltonian): log pi(theta) - 0.5 r' M^{-1} r.
 static inline double joint_logdens(Target& tgt, const VectorXd& theta,
-                                   const VectorXd& r, const VectorXd& inv_M) {
-  return tgt.f(theta) - 0.5 * (inv_M.array() * r.array().square()).sum();
+                                   const VectorXd& r, const Metric& metric) {
+  return tgt.f(theta) - 0.5 * metric.quad(r);
 }
 // As above but with a precomputed log pi(theta) (avoids a redundant f call).
 static inline double joint_from_logp(double logp, const VectorXd& r,
-                                     const VectorXd& inv_M) {
-  return logp - 0.5 * (inv_M.array() * r.array().square()).sum();
+                                     const Metric& metric) {
+  return logp - 0.5 * metric.quad(r);
 }
 
 // ---------------------------------------------------------------------------
@@ -112,10 +199,10 @@ static inline double joint_from_logp(double logp, const VectorXd& r,
 // ---------------------------------------------------------------------------
 static inline bool no_u_turn(const VectorXd& theta_plus, const VectorXd& theta_minus,
                              const VectorXd& r_plus, const VectorXd& r_minus,
-                             const VectorXd& inv_M) {
+                             const Metric& metric) {
   VectorXd delta = theta_plus - theta_minus;
-  double a = delta.dot((inv_M.array() * r_minus.array()).matrix());
-  double b = delta.dot((inv_M.array() * r_plus.array()).matrix());
+  double a = delta.dot(metric.apply(r_minus));
+  double b = delta.dot(metric.apply(r_plus));
   return (a >= 0.0) && (b >= 0.0);
 }
 
@@ -147,16 +234,16 @@ static inline double runif01() { return ::unif_rand(); }
 static Tree build_tree(Target& tgt,
                        const VectorXd& theta, const VectorXd& r, const VectorXd& grad,
                        double log_u0, int v, int j, double eps,
-                       const VectorXd& inv_M, double Delta_max) {
+                       const Metric& metric, double Delta_max) {
   Tree t;
   if (j == 0) {
     // Base case: one leapfrog step in direction v.
     VectorXd th = theta, rr = r, gr = grad;
-    double logp = leapfrog(tgt, th, rr, gr, v * eps, inv_M);
+    double logp = leapfrog(tgt, th, rr, gr, v * eps, metric);
     // Fused targets return logp from the leapfrog (same theta, one eval);
     // otherwise compute it now -- identical to the original call pattern.
     if (!tgt.has_fused) logp = tgt.f(th);
-    double joint = joint_from_logp(logp, rr, inv_M);
+    double joint = joint_from_logp(logp, rr, metric);
 
     t.theta_minus = th; t.r_minus = rr; t.grad_minus = gr;
     t.theta_plus  = th; t.r_plus  = rr; t.grad_plus  = gr;
@@ -177,7 +264,7 @@ static Tree build_tree(Target& tgt,
   }
 
   // Recurse: build the first half-subtree.
-  Tree t0 = build_tree(tgt, theta, r, grad, log_u0, v, j - 1, eps, inv_M, Delta_max);
+  Tree t0 = build_tree(tgt, theta, r, grad, log_u0, v, j - 1, eps, metric, Delta_max);
   t = t0;
   if (!t0.s) { return t; }   // early stop: divergence/U-turn already inside (t.divergent carried)
 
@@ -185,11 +272,11 @@ static Tree build_tree(Target& tgt,
   Tree t1;
   if (v == -1) {
     t1 = build_tree(tgt, t0.theta_minus, t0.r_minus, t0.grad_minus,
-                    log_u0, v, j - 1, eps, inv_M, Delta_max);
+                    log_u0, v, j - 1, eps, metric, Delta_max);
     t.theta_minus = t1.theta_minus; t.r_minus = t1.r_minus; t.grad_minus = t1.grad_minus;
   } else {
     t1 = build_tree(tgt, t0.theta_plus, t0.r_plus, t0.grad_plus,
-                    log_u0, v, j - 1, eps, inv_M, Delta_max);
+                    log_u0, v, j - 1, eps, metric, Delta_max);
     t.theta_plus = t1.theta_plus; t.r_plus = t1.r_plus; t.grad_plus = t1.grad_plus;
   }
 
@@ -219,26 +306,23 @@ static Tree build_tree(Target& tgt,
   // Divergence is monotone: either half carrying one taints the combined tree.
   t.divergent = t0.divergent || t1.divergent;
   // Stop if the sub-subtree diverged/U-turned, or a U-turn now spans the ends.
-  t.s = t1.s && no_u_turn(t.theta_plus, t.theta_minus, t.r_plus, t.r_minus, inv_M);
+  t.s = t1.s && no_u_turn(t.theta_plus, t.theta_minus, t.r_plus, t.r_minus, metric);
   return t;
 }
 
 // ---------------------------------------------------------------------------
 // One full NUTS transition. Given the current theta and step size eps, samples
-// a new theta and returns it along with diagnostics. `inv_M` = 1 / M_diag.
-// The momentum is drawn r ~ N(0, M) = N(0, diag(1/inv_M)).
+// a new theta and returns it along with diagnostics. The metric carries
+// inv_M = M^{-1}; the momentum is drawn r ~ N(0, M).
 // ---------------------------------------------------------------------------
 static List nuts_transition(Target& tgt, const VectorXd& theta0,
-                            double eps, const VectorXd& inv_M,
+                            double eps, const Metric& metric,
                             int max_treedepth, double Delta_max) {
-  const int d = theta0.size();
-
-  // Sample momentum r ~ N(0, M). sd of component i is sqrt(M_ii) = 1/sqrt(inv_M_i).
-  VectorXd r0(d);
-  for (int i = 0; i < d; ++i) r0[i] = ::norm_rand() / std::sqrt(inv_M[i]);
+  // Sample momentum r ~ N(0, M) (diagonal or dense; see Metric::sample).
+  VectorXd r0 = metric.sample();
 
   double logp0 = tgt.f(theta0);
-  double log_u0 = joint_from_logp(logp0, r0, inv_M);   // computed ONCE per iter
+  double log_u0 = joint_from_logp(logp0, r0, metric);   // computed ONCE per iter
   VectorXd grad0 = tgt.g(theta0);
 
   VectorXd theta_minus = theta0, theta_plus = theta0;
@@ -259,11 +343,11 @@ static List nuts_transition(Target& tgt, const VectorXd& theta0,
     Tree t;
     if (v == -1) {
       t = build_tree(tgt, theta_minus, r_minus, grad_minus,
-                     log_u0, v, depth, eps, inv_M, Delta_max);
+                     log_u0, v, depth, eps, metric, Delta_max);
       theta_minus = t.theta_minus; r_minus = t.r_minus; grad_minus = t.grad_minus;
     } else {
       t = build_tree(tgt, theta_plus, r_plus, grad_plus,
-                     log_u0, v, depth, eps, inv_M, Delta_max);
+                     log_u0, v, depth, eps, metric, Delta_max);
       theta_plus = t.theta_plus; r_plus = t.r_plus; grad_plus = t.grad_plus;
     }
     n_leapfrog += (1 << depth);
@@ -290,7 +374,7 @@ static List nuts_transition(Target& tgt, const VectorXd& theta0,
     if (t.divergent) divergent = true;   // a leaf's energy blew up
 
     // Continue only if the new subtree is valid AND no U-turn spans the ends.
-    s = t.s && no_u_turn(theta_plus, theta_minus, r_plus, r_minus, inv_M);
+    s = t.s && no_u_turn(theta_plus, theta_minus, r_plus, r_minus, metric);
     depth += 1;
   }
 
@@ -338,7 +422,18 @@ List nuts_step_callback(NumericVector theta0, Function f, Function grad_f,
   Target tgt = make_callback_target(f, grad_f);
   VectorXd th = Eigen::Map<VectorXd>(theta0.begin(), theta0.size());
   VectorXd im = Eigen::Map<VectorXd>(inv_M.begin(), inv_M.size());
-  return nuts_transition(tgt, th, eps, im, max_treedepth, Delta_max);
+  return nuts_transition(tgt, th, eps, Metric(im), max_treedepth, Delta_max);
+}
+
+// Single NUTS transition, callback tier, DENSE metric (inv_M a d x d matrix).
+// [[Rcpp::export]]
+List nuts_step_callback_dense(NumericVector theta0, Function f, Function grad_f,
+                              double eps, NumericMatrix inv_M,
+                              int max_treedepth = 10, double Delta_max = 1000.0) {
+  Target tgt = make_callback_target(f, grad_f);
+  VectorXd th = Eigen::Map<VectorXd>(theta0.begin(), theta0.size());
+  MatrixXd im = Eigen::Map<MatrixXd>(inv_M.begin(), inv_M.nrow(), inv_M.ncol());
+  return nuts_transition(tgt, th, eps, Metric(im), max_treedepth, Delta_max);
 }
 
 // Build a FUSED callback target from a single R function fg(theta) returning a
@@ -399,7 +494,7 @@ List nuts_sample_callback(NumericVector theta0, Function f, Function grad_f,
     for (int i = 0; i < d; ++i) im[i] = inv_M(row, i);
     double eps = (eps_seq.size() == 1) ? eps_seq[0] : eps_seq[it];
 
-    List step = nuts_transition(tgt, th, eps, im, max_treedepth, Delta_max);
+    List step = nuts_transition(tgt, th, eps, Metric(im), max_treedepth, Delta_max);
     NumericVector nt = step["theta"];
     th = Eigen::Map<VectorXd>(nt.begin(), nt.size());
     for (int i = 0; i < d; ++i) trace(it, i) = th[i];
@@ -424,7 +519,18 @@ List nuts_step_fused_callback(NumericVector theta0, Function fg,
   Target tgt = make_fused_callback_target(fg);
   VectorXd th = Eigen::Map<VectorXd>(theta0.begin(), theta0.size());
   VectorXd im = Eigen::Map<VectorXd>(inv_M.begin(), inv_M.size());
-  return nuts_transition(tgt, th, eps, im, max_treedepth, Delta_max);
+  return nuts_transition(tgt, th, eps, Metric(im), max_treedepth, Delta_max);
+}
+
+// Single NUTS transition with a FUSED R target, DENSE metric (inv_M a matrix).
+// [[Rcpp::export]]
+List nuts_step_fused_callback_dense(NumericVector theta0, Function fg,
+                                    double eps, NumericMatrix inv_M,
+                                    int max_treedepth = 10, double Delta_max = 1000.0) {
+  Target tgt = make_fused_callback_target(fg);
+  VectorXd th = Eigen::Map<VectorXd>(theta0.begin(), theta0.size());
+  MatrixXd im = Eigen::Map<MatrixXd>(inv_M.begin(), inv_M.nrow(), inv_M.ncol());
+  return nuts_transition(tgt, th, eps, Metric(im), max_treedepth, Delta_max);
 }
 
 // Whole-chain sampler with a FUSED R target. Mirrors nuts_sample_callback but
@@ -448,7 +554,7 @@ List nuts_sample_fused_callback(NumericVector theta0, Function fg,
     for (int i = 0; i < d; ++i) im[i] = inv_M(row, i);
     double eps = (eps_seq.size() == 1) ? eps_seq[0] : eps_seq[it];
 
-    List step = nuts_transition(tgt, th, eps, im, max_treedepth, Delta_max);
+    List step = nuts_transition(tgt, th, eps, Metric(im), max_treedepth, Delta_max);
     NumericVector nt = step["theta"];
     th = Eigen::Map<VectorXd>(nt.begin(), nt.size());
     for (int i = 0; i < d; ++i) trace(it, i) = th[i];
@@ -497,7 +603,7 @@ List nuts_sample_xptr(NumericVector theta0, SEXP f_ptr, SEXP g_ptr,
     for (int i = 0; i < d; ++i) im[i] = inv_M(row, i);
     double eps = (eps_seq.size() == 1) ? eps_seq[0] : eps_seq[it];
 
-    List step = nuts_transition(tgt, th, eps, im, max_treedepth, Delta_max);
+    List step = nuts_transition(tgt, th, eps, Metric(im), max_treedepth, Delta_max);
     NumericVector nt = step["theta"];
     th = Eigen::Map<VectorXd>(nt.begin(), nt.size());
     for (int i = 0; i < d; ++i) trace(it, i) = th[i];
@@ -514,25 +620,19 @@ List nuts_sample_xptr(NumericVector theta0, SEXP f_ptr, SEXP g_ptr,
                       _["n_grad"] = (double)tgt.n_grad);
 }
 
-// find_reasonable_epsilon (Hoffman & Gelman Alg. 4) in C++, callback tier.
-// [[Rcpp::export]]
-double find_reasonable_epsilon_cpp(NumericVector theta0, Function f, Function grad_f,
-                                   NumericVector inv_M, double eps = 1.0) {
-  Target tgt = make_callback_target(f, grad_f);
-  const int d = theta0.size();
-  VectorXd theta = Eigen::Map<VectorXd>(theta0.begin(), theta0.size());
-  VectorXd im = Eigen::Map<VectorXd>(inv_M.begin(), inv_M.size());
-
-  VectorXd r(d);
-  for (int i = 0; i < d; ++i) r[i] = ::norm_rand() / std::sqrt(im[i]);
+// Shared body for find_reasonable_epsilon (Hoffman & Gelman Alg. 4) given a
+// target and a (diagonal or dense) metric.
+static double find_reasonable_epsilon_impl(Target& tgt, const VectorXd& theta,
+                                           const Metric& metric, double eps) {
+  VectorXd r = metric.sample();
   VectorXd grad = tgt.g(theta);
 
   double logp0 = tgt.f(theta);
-  double joint0 = joint_from_logp(logp0, r, im);
+  double joint0 = joint_from_logp(logp0, r, metric);
 
   VectorXd th = theta, rr = r, gr = grad;
-  leapfrog(tgt, th, rr, gr, eps, im);
-  double joint1 = joint_logdens(tgt, th, rr, im);
+  leapfrog(tgt, th, rr, gr, eps, metric);
+  double joint1 = joint_logdens(tgt, th, rr, metric);
 
   double log_ratio = joint1 - joint0;
   double a = (log_ratio > std::log(0.5)) ? 1.0 : -1.0;
@@ -540,10 +640,47 @@ double find_reasonable_epsilon_cpp(NumericVector theta0, Function f, Function gr
   while (!std::isfinite(log_ratio) || a * log_ratio > -a * std::log(2.0)) {
     eps = std::pow(2.0, a) * eps;
     th = theta; rr = r; gr = grad;
-    leapfrog(tgt, th, rr, gr, eps, im);
-    joint1 = joint_logdens(tgt, th, rr, im);
+    leapfrog(tgt, th, rr, gr, eps, metric);
+    joint1 = joint_logdens(tgt, th, rr, metric);
     log_ratio = joint1 - joint0;
     if (++count > 100) stop("find_reasonable_epsilon: no reasonable eps in 100 steps");
   }
   return eps;
+}
+
+// Test/diagnostic hook: draw n momenta r ~ N(0, M) from a DENSE metric with the
+// given inv_M (= M^{-1}). Used by the test suite to verify the momentum draw has
+// empirical Cov(r) ~= M (guards the matrixU-vs-matrixL direction). Not used by
+// the sampler itself.
+// [[Rcpp::export]]
+NumericMatrix nuts_metric_sample_dense_cpp(NumericMatrix inv_M, int n) {
+  MatrixXd im = Eigen::Map<MatrixXd>(inv_M.begin(), inv_M.nrow(), inv_M.ncol());
+  Metric metric(im);
+  const int d = metric.size();
+  NumericMatrix out(n, d);
+  for (int it = 0; it < n; ++it) {
+    VectorXd r = metric.sample();
+    for (int i = 0; i < d; ++i) out(it, i) = r[i];
+  }
+  return out;
+}
+
+// find_reasonable_epsilon, callback tier, DIAGONAL metric.
+// [[Rcpp::export]]
+double find_reasonable_epsilon_cpp(NumericVector theta0, Function f, Function grad_f,
+                                   NumericVector inv_M, double eps = 1.0) {
+  Target tgt = make_callback_target(f, grad_f);
+  VectorXd theta = Eigen::Map<VectorXd>(theta0.begin(), theta0.size());
+  VectorXd im = Eigen::Map<VectorXd>(inv_M.begin(), inv_M.size());
+  return find_reasonable_epsilon_impl(tgt, theta, Metric(im), eps);
+}
+
+// find_reasonable_epsilon, callback tier, DENSE metric.
+// [[Rcpp::export]]
+double find_reasonable_epsilon_dense_cpp(NumericVector theta0, Function f, Function grad_f,
+                                         NumericMatrix inv_M, double eps = 1.0) {
+  Target tgt = make_callback_target(f, grad_f);
+  VectorXd theta = Eigen::Map<VectorXd>(theta0.begin(), theta0.size());
+  MatrixXd im = Eigen::Map<MatrixXd>(inv_M.begin(), inv_M.nrow(), inv_M.ncol());
+  return find_reasonable_epsilon_impl(tgt, theta, Metric(im), eps);
 }

@@ -95,6 +95,14 @@ install.packages(c(
 ))
 ```
 
+### Optimized BLAS/LAPACK (optional, recommended for large runs)
+
+MLE optimization and NUTS sampling are dominated by dense linear algebra, which
+runs much faster against a tuned BLAS than R's default reference library. See
+[`Code/BLAS.md`](Code/BLAS.md) for how to switch to Apple Accelerate (macOS), an
+optimized `Rblas.dll` (Windows), or OpenBLAS (any platform), and how to verify
+and benchmark the change.
+
 ## Native repository setup
 
 The canonical run files use relative paths. From `Runfiles`, create the shared

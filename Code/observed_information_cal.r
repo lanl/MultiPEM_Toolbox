@@ -38,6 +38,14 @@ obs_info_cal = function(p_cal,opt,imle=TRUE)
 
   Hess = -opt$hessian
   Hess = forceSymmetric(Hess)
+  # Conditioning report: name the parameter directions the data poorly
+  # constrain (ill-conditioned information -> unreliable SEs / poor mixing).
+  # No-op if conditioning_report.r was not sourced.
+  if( exists("report_conditioning_pc") ){
+    report_conditioning_pc(Hess, p_cal, which="information",
+                           label=if(imle) "MLE information (calp)"
+                                  else "MAP information")
+  }
   cHessCatch = p_cal$tryCatch.W.E(chol(Hess))
   delta = 1.e-17
   idelta = FALSE

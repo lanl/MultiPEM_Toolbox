@@ -204,6 +204,73 @@ creation captures the populated `Opt` directory; adding files to canonical
 used for this handoff because it accepts one calibration workspace only and is
 valid solely with `--stage event`.
 
+NUTS dense-metric warm-start files (metric.RData / metric_0.RData)
+-----------------------------------------------------------------
+
+When a deck runs NUTS with the dense mass matrix (`iMCMC="NUTS"`,
+`nuts_metric="dense"`), the sampler warm-starts its warmup from a dense seed
+metric to avoid the costly cold (identity-metric) warmup. The deck variable
+`nuts_warmstart` selects the source:
+
+    "auto"  - use the saved metric file if present in the run directory,
+              otherwise run a short pilot (the default);
+    "pilot" - always run a pilot to estimate the seed;
+    "none"  - cold start.
+
+On completion each NUTS run AUTO-SAVES its adapted metric into the run
+directory: calibration decks (`runMPEM.r` -> calc_bayes_cal/calc_bayes) write
+`metric.RData`; event decks (`runMPEM_0.r` -> calc_bayes_0) write
+`metric_0.RData`. In the Docker workflow the run directory is the bind-mounted
+job workspace, so the file persists on the host at:
+
+    RESULTS/work/APPLICATION/PHENOMENOLOGY/ANALYSIS/metric.RData
+    RESULTS/work/APPLICATION/PHENOMENOLOGY/ANALYSIS/metric_0.RData   (event)
+
+These metric files are an OPTIMIZATION, not required state: losing one merely
+falls back to a pilot on the next run. They are distinct from the calibration
+`.RData` checkpoint used by `--workspace`.
+
+Reusing a metric in a new job: --metric / --metric-0
+----------------------------------------------------
+
+The launcher stages a warm-start metric into a NEW job, analogous to how
+`--workspace` stages a calibration checkpoint:
+
+    --metric FILE      copies FILE to the job's analysis dir as metric.RData
+                       (the runMPEM.r / calibration-or-joint stack)
+    --metric-0 FILE    copies FILE to the job's analysis dir as metric_0.RData
+                       (the runMPEM_0.r / event stack)
+
+Both are valid only when CREATING a job (not when reusing an existing results
+directory). `--metric` is valid with `--stage full` or `calibration`;
+`--metric-0` with `--stage full` or `event`. For a sequential full run (a case
+that has both `runMPEM.r` and `runMPEM_0.r`), supply both to seed each stage;
+each deck's `nuts_warmstart="auto"` then finds its own file in the shared run
+directory. For a combined one-stage `calc_bayes` case (no `runMPEM_0.r`), only
+`--metric` is read; a `--metric-0` given with `--stage full` there is staged but
+never used.
+
+For example, to seed a new job from a completed run in `results/hob-nuts`:
+
+    Rscript mpem.R run IYDT-gsrp/Seismic/I-SUGAR-hob-0 --stage full \
+      --metric   results/hob-nuts/work/IYDT-gsrp/Seismic/I-SUGAR-hob-0/metric.RData \
+      --metric-0 results/hob-nuts/work/IYDT-gsrp/Seismic/I-SUGAR-hob-0/metric_0.RData \
+      --results results/hob-seeded
+
+What `metric.RData` contains depends on the deck: a JOINT calibration+new-event
+covariance for a complete-assessment (`calc_bayes`) deck, a calibration-only
+covariance for a rapid (`calc_bayes_cal`) deck, and a calibration-only covariance
+for a combined deck run with new-event parameters off. `metric_0.RData` is the
+event covariance. A metric is only ever loaded by a run of matching dimension;
+one saved from a different model structure is rejected on a dimension check and
+the run falls back to a pilot, so a stale or mismatched file is safe (just
+slower), never wrong.
+
+Alternative (no flag): stage the file like an optimization input, i.e. copy it
+into canonical `../Runfiles/.../ANALYSIS/` BEFORE creating the job (job creation
+snapshots that tree). The `--metric` flags are the preferred, less error-prone
+route.
+
 Job snapshots and output
 ------------------------
 
@@ -343,12 +410,10 @@ Run a subset with:
     Rscript mpem.R verify --global-only mpem/accepted-baseline
     Rscript mpem.R verify --apps-only mpem/accepted-baseline
 
-These suites validate shared calculations, IYDT forward-model code, transform
-and prior derivatives, and the production-data column contracts represented by
-the Data suite. Before production use, also run representative input decks for
-every affected model and compare their workspaces with `mpem.R compare`.
-Stochastic comparisons must use identical seeds and logical calculation
-settings.
+These suites validate shared calculations and IYDT forward-model code. Before
+production use, also run representative input decks for every affected model
+and compare their workspaces with `mpem.R compare`. Stochastic comparisons must
+use identical seeds and logical calculation settings.
 
 Adding an application
 ---------------------

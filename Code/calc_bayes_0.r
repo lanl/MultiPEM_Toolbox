@@ -25,7 +25,8 @@ calc_bayes_0 = function(p_cal,gdir,adir,nst=10,nburn=10000,nmcmc=20000,
                         igrck_pr=TRUE,igrck_po=TRUE,bfgs=TRUE,
                         itpr=FALSE,fpr_t=NULL,fgpr_t=NULL,imcmc="FME",
                         pl="multicore",ncor_smc=NULL,lb_smc=NULL,
-                        ub_smc=NULL,t_cal=NULL)
+                        ub_smc=NULL,t_cal=NULL,nuts_metric="dense",
+                        nuts_warmstart="auto")
 {
   #
   # FUNCTION INPUTS
@@ -60,6 +61,17 @@ calc_bayes_0 = function(p_cal,gdir,adir,nst=10,nburn=10000,nmcmc=20000,
   # lb_smc: lower bounds of new event parameters for SMC sampling
   # ub_smc: upper bounds of new event parameters for SMC sampling
   # t_cal: object used if bounds supplied to MLE optimization
+  # nuts_metric: NUTS mass-matrix type, "dense" (Stan dense_e, default) or
+  #     "diag" (Stan diag_e). Dense adapts a full covariance metric that
+  #     captures posterior correlations and shortens trajectories on correlated
+  #     targets; diag adapts only per-parameter scales. Ignored unless
+  #     imcmc == "NUTS".
+  # nuts_warmstart: dense-metric warm-start seed (quality-neutral warmup
+  #     speedup). "auto" (default) uses ./metric_0.RData if present, else runs a
+  #     pilot; "pilot" always runs the pilot; "none" cold-starts; a file path
+  #     loads that metric (falling back to pilot if missing/wrong-dim). Applies
+  #     to the single-target (nimp==1) NUTS path; auto-saves ./metric_0.RData
+  #     (distinct from the calibration stack's metric.RData) for reuse.
 
   #
   # END FUNCTION INPUTS
@@ -68,6 +80,12 @@ calc_bayes_0 = function(p_cal,gdir,adir,nst=10,nburn=10000,nmcmc=20000,
   #   
   # SOURCE SUPPORTING R FUNCTIONS
   #     
+
+  # diagnostics: parameter labels, conditioning report (MAP information),
+  # and MCMC convergence (R-hat/ESS) reporting
+  source(paste(gdir,"/param_labels.r",sep=""),local=TRUE)
+  source(paste(gdir,"/conditioning_report.r",sep=""),local=TRUE)
+  source(paste(gdir,"/mcmc_convergence.r",sep=""),local=TRUE)
 
   if( !exists("obs_info_0",where=p_cal,inherits=FALSE) ){
     # R function to calculate observed information matrix
@@ -607,13 +625,27 @@ calc_bayes_0 = function(p_cal,gdir,adir,nst=10,nburn=10000,nmcmc=20000,
       if( !igrad ){
         stop("Gradient of log-posterior must be provided.")
       }
+      # Dense warm-start metric (quality-neutral warmup speedup). Sourced
+      # unconditionally so the metric auto-save helper is available for "none".
+      source(paste(gdir,"/nuts_warmstart.r",sep=""),local=TRUE)
+      M_init = NULL
+      if( nuts_metric == "dense" && !identical(nuts_warmstart,"none") ){
+        M_init = tryCatch(
+          resolve_warmstart_metric(nuts_warmstart, x0=map$par, d=length(map$par),
+                                   lpg=lpg, f=lpost_0, grad_f=glpost_0,
+                                   use_fused=use_fused, seed=si[1],
+                                   metric_file="metric_0.RData"),
+          error=function(e){ message("warm-start skipped: ",conditionMessage(e)); NULL })
+      } else if( nuts_metric != "dense" && !identical(nuts_warmstart,"none") ){
+        print("NUTS warm-start ignored (only applies to nuts_metric='dense').")
+      }
       ptm = proc.time()
       if( use_fused ){
         # Fused single-callback path (one logp+grad evaluation per leaf).
         fham = lapply(1:ncor_mc, function(qq) { future(NUTS(xi[qq,],
                                  fg=lpg,
                                  n_iter=nburn+round(nmcmc/ncor_mc),
-                                 warmup=nburn,
+                                 warmup=nburn,metric=nuts_metric,M_init=M_init,
                                  diagnostics=TRUE,verbose=FALSE),
                                  seed=si[qq]) })
       } else {
@@ -621,7 +653,7 @@ calc_bayes_0 = function(p_cal,gdir,adir,nst=10,nburn=10000,nmcmc=20000,
         fham = lapply(1:ncor_mc, function(qq) { future(NUTS(xi[qq,],
                                  f=lpost_0,grad_f=glpost_0,
                                  n_iter=nburn+round(nmcmc/ncor_mc),
-                                 warmup=nburn,
+                                 warmup=nburn,metric=nuts_metric,M_init=M_init,
                                  diagnostics=TRUE,verbose=FALSE),
                                  seed=si[qq]) })
       }
@@ -662,6 +694,21 @@ calc_bayes_0 = function(p_cal,gdir,adir,nst=10,nburn=10000,nmcmc=20000,
                   round(100*ndiv_tot/npost_tot,2),
                   "%); TOTAL max-treedepth hits: ",nmaxtd_tot,sep=""))
       cat("\n")
+      # Divergence attribution (read-only, pooled across chains): locate where
+      # post-warmup divergences concentrate (the funnel fingerprint). Guarded.
+      if( ndiv_tot > 0 ){
+        tryCatch({
+          source(paste(gdir,"/nuts_diagnostics.r",sep=""),local=TRUE)
+          pooled = list(
+            all_draws = do.call(rbind, lapply(ham, function(h) h$all_draws)),
+            diagnostics = do.call(rbind, lapply(ham, function(h) h$diagnostics)))
+          blk = tryCatch(nuts_blocks_from_pcal(p_cal), error=function(e) NULL)
+          print_divergence_attribution(
+            divergence_attribution(pooled, blocks=blk), "pooled chains")
+          cat("\n")
+        }, error=function(e)
+          message("divergence attribution skipped: ", conditionMessage(e)))
+      }
       # extract post-burnin posterior samples
       mpi = NULL
       for (qq in 1:ncor_mc){
@@ -669,6 +716,20 @@ calc_bayes_0 = function(p_cal,gdir,adir,nst=10,nburn=10000,nmcmc=20000,
         mpi = rbind(mpi,tmpi)
       }
       if (is.vector(mpi)) { mpi = matrix(mpi,ncol=1) }
+      # Auto-save the adapted dense metric (mean of per-chain inv_M) for reuse
+      # as a future warm-start seed. Guarded.
+      if( nuts_metric == "dense" && exists("save_nuts_metric") ){
+        tryCatch({
+          Ms = lapply(ham, function(h) as.matrix(h$inv_M))
+          Ms = Ms[sapply(Ms, function(m) is.matrix(m) && nrow(m)==ncol(mpi))]
+          if( length(Ms) > 0 ){
+            Mbar = Reduce(`+`, Ms) / length(Ms)
+            save_nuts_metric(Mbar, path="./metric_0.RData", imcmc="NUTS",
+                             provenance=paste0(basename(getwd())))
+          }
+        }, error=function(e)
+          message("metric auto-save skipped: ", conditionMessage(e)))
+      }
     } else {
       xi = NULL
       eps = 0.001
@@ -683,6 +744,7 @@ calc_bayes_0 = function(p_cal,gdir,adir,nst=10,nburn=10000,nmcmc=20000,
                q_cal = p_cal$pc_0(p_cal$mpi[qq,], p_cal)
                q_cal$niter = nburn+nmcmc
                q_cal$warmup = nburn
+               q_cal$nuts_metric = nuts_metric
                q_cal$lpost_0 = lpost_0
                q_cal$glpost_0 = glpost_0
                # q_cal inherits llg_0/lpg_0 from p_cal via pc_0(); nuts_imp
@@ -727,6 +789,21 @@ calc_bayes_0 = function(p_cal,gdir,adir,nst=10,nburn=10000,nmcmc=20000,
                   round(100*ndiv_tot/npost_tot,2),
                   "%); TOTAL max-treedepth hits: ",nmaxtd_tot,sep=""))
       cat("\n")
+      # Divergence attribution (read-only, pooled across imputations): locate
+      # where post-warmup divergences concentrate (the funnel fingerprint).
+      if( ndiv_tot > 0 ){
+        tryCatch({
+          source(paste(gdir,"/nuts_diagnostics.r",sep=""),local=TRUE)
+          pooled = list(
+            all_draws = do.call(rbind, lapply(fham, function(h) h$all_draws)),
+            diagnostics = do.call(rbind, lapply(fham, function(h) h$diagnostics)))
+          blk = tryCatch(nuts_blocks_from_pcal(p_cal), error=function(e) NULL)
+          print_divergence_attribution(
+            divergence_attribution(pooled, blocks=blk), "pooled imputations")
+          cat("\n")
+        }, error=function(e)
+          message("divergence attribution skipped: ", conditionMessage(e)))
+      }
       # extract post-burnin posterior samples
       mpi = NULL
       ipi = seq(1,nmcmc,by=nthin)
@@ -800,6 +877,49 @@ calc_bayes_0 = function(p_cal,gdir,adir,nst=10,nburn=10000,nmcmc=20000,
       tmpi = tmpi[ipi,,drop=FALSE]
       mpi = rbind(mpi,tmpi)
     }
+  }
+
+  # MCMC convergence report. Three cases:
+  #  - nimp==1 RAM/FME/NUTS: genuine parallel chains -> cross-chain R-hat/ESS.
+  #  - nimp>1 RAM/FME/NUTS: each imputation is a DIFFERENT target (conditioned on
+  #    a different calibration draw), so cross-chain R-hat is not meaningful;
+  #    report within-chain split-R-hat/ESS per imputation instead.
+  #  - SMC: particle sampler, no Markov chain -> N/A.
+  # Guarded so it can never abort the run.
+  if( exists("report_convergence") ){
+    tryCatch({
+      labs = tryCatch(make_param_labels_0(p_cal, target=ncol(mpi)),
+                      error=function(e) NULL)
+      if( imcmc == "SMC" ){
+        report_convergence(list(), labs, kind="smc")
+      } else if( imcmc %in% c("RAM","FME","NUTS") && nimp == 1 ){
+        cl = NULL
+        if( imcmc == "RAM" ){
+          cl = lapply(1:ncor_mc, function(qq)
+                 as.matrix(ram[[qq]]$samples[-(1:nburn),,drop=FALSE]))
+        } else if( imcmc == "FME" ){
+          cl = lapply(1:ncor_mc, function(qq) as.matrix(fme[[qq]]$pars))
+        } else if( imcmc == "NUTS" ){
+          cl = lapply(1:ncor_mc, function(qq) as.matrix(ham[[qq]]$theta))
+        }
+        report_convergence(cl, labs, kind="cross-chain")
+      } else if( imcmc %in% c("RAM","FME","NUTS") && nimp > 1 ){
+        # one single-chain-per-imputation object; report split diag per imputation
+        src = if( imcmc == "RAM" ) fram else if( imcmc == "FME" ) fme else fham
+        cat("\nMCMC CONVERGENCE (within-chain split-R-hat / ESS, per imputation)\n")
+        for( qq in 1:nimp ){
+          ch = tryCatch(as.matrix(src[[qq]]$samples), error=function(e) NULL)
+          if( is.null(ch) ) ch = tryCatch(as.matrix(src[[qq]]$pars), error=function(e) NULL)
+          if( is.null(ch) ) ch = tryCatch(as.matrix(src[[qq]]$theta), error=function(e) NULL)
+          if( is.null(ch) ) next
+          sd = split_rhat_ess(ch)
+          cat(sprintf("  imputation %d: max R-hat=%.2f, min bulk-ESS=%.0f\n",
+                      qq, max(sd$rhat,na.rm=TRUE), min(sd$ess_bulk,na.rm=TRUE)))
+        }
+      }
+      cat("\n")
+    }, error=function(e)
+      message("convergence report skipped: ", conditionMessage(e)))
   }
 
   # Print posterior summary statistics
@@ -898,12 +1018,15 @@ nuts_imp = function(xi,p_cal)
   # Use the fused single-callback log-posterior value+gradient evaluator when
   # available (attached to p_cal as lpg_0); otherwise fall back to the separate
   # value/gradient callbacks. Bitwise-identical draws either way.
+  # Mass-matrix type is read from p_cal$nuts_metric (set by the caller);
+  # default to "dense" if unset.
+  nmetric = if( is.null(p_cal$nuts_metric) ) "dense" else p_cal$nuts_metric
   if( !is.null(p_cal$lpg_0) ){
     lpg = function(x) p_cal$lpg_0(x, p_cal)
     NUTS(xi,fg=lpg,n_iter=p_cal$niter,
-         warmup=p_cal$warmup,diagnostics=TRUE,verbose=FALSE)
+         warmup=p_cal$warmup,metric=nmetric,diagnostics=TRUE,verbose=FALSE)
   } else {
     NUTS(xi,f=p_cal$lpost_0,grad_f=p_cal$glpost_0,n_iter=p_cal$niter,
-         warmup=p_cal$warmup,diagnostics=TRUE,verbose=FALSE)
+         warmup=p_cal$warmup,metric=nmetric,diagnostics=TRUE,verbose=FALSE)
   }
 }

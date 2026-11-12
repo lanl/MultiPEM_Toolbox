@@ -62,7 +62,12 @@ if (!exists("compile_nuts_core")) {
 #'                Warmup draws are discarded from the returned trace.
 #' @param M_diag  Optional fixed diagonal mass matrix. If NULL and adapt_mass is
 #'                TRUE it is adapted; if adapt_mass is FALSE it defaults to ones.
-#' @param adapt_mass Adapt a diagonal mass matrix during warmup (default TRUE).
+#' @param adapt_mass Adapt the mass matrix during warmup (default TRUE).
+#' @param metric  "diag" (default) adapts a diagonal mass matrix (Stan diag_e);
+#'                "dense" adapts a full dense mass matrix (Stan dense_e), which
+#'                captures posterior correlations the diagonal metric cannot and
+#'                so shortens trajectories on correlated targets. Requires the
+#'                callback or fused backend (not xptr).
 #' @param delta   Target mean Metropolis accept probability (default 0.8).
 #' @param max_treedepth Maximum NUTS tree depth (default 10).
 #' @param eps     Initial step-size guess (a reasonable value is found from it).
@@ -71,6 +76,20 @@ if (!exists("compile_nuts_core")) {
 #' @param backend "callback" (R target functions) or "xptr" (compiled target;
 #'                f_ptr/g_ptr must then be supplied instead of f/grad_f).
 #' @param f_ptr,g_ptr XPtr externalptr's for the compiled target (backend="xptr").
+#' @param M_dense Optional fixed DENSE mass matrix M (d x d, SPD). If supplied,
+#'                the metric is dense and held fixed (no warmup adaptation),
+#'                analogous to M_diag for the diagonal metric. Use this to seed a
+#'                known metric -- e.g. the inverse observed-information at the MAP
+#'                (a Laplace covariance) -- and skip the expensive identity-metric
+#'                warmup. Mutually exclusive with M_diag; implies metric="dense".
+#' @param M_init Optional DENSE warm-start metric inv_M (d x d, SPD, i.e. a
+#'                covariance-scale metric). UNLIKE M_dense, adaptation stays ON:
+#'                M_init only sets the STARTING metric and is overwritten by the
+#'                first warmup adaptation window. This shortens the time to reach
+#'                good geometry WITHOUT affecting the final adapted metric or step
+#'                size (Stan's metric_file / inv_metric warm-start pattern), so it
+#'                is quality-neutral. Implies metric="dense". Mutually exclusive
+#'                with M_dense and M_diag.
 #' @param seed    Optional RNG seed.
 #' @param diagnostics If TRUE, return a list with the trace plus per-iteration
 #'                diagnostics; otherwise return just the post-warmup trace matrix.
@@ -78,7 +97,8 @@ if (!exists("compile_nuts_core")) {
 #' @return A matrix (post-warmup draws x parameters), or a list if diagnostics.
 NUTS <- function(theta, f = NULL, grad_f = NULL, n_iter,
                  warmup = floor(n_iter / 2),
-                 M_diag = NULL, adapt_mass = TRUE,
+                 M_diag = NULL, M_dense = NULL, M_init = NULL, adapt_mass = TRUE,
+                 metric = c("diag", "dense"),
                  delta = 0.8, max_treedepth = 10, eps = 1,
                  numeric_grad = c("richardson", "simple", "none"),
                  backend = c("callback", "xptr", "fused"),
@@ -86,6 +106,13 @@ NUTS <- function(theta, f = NULL, grad_f = NULL, n_iter,
                  seed = NULL, diagnostics = FALSE, verbose = TRUE) {
 
   numeric_grad <- match.arg(numeric_grad)
+  # A supplied dense mass matrix (fixed M_dense or warm-start M_init) implies
+  # (and forces) the dense metric.
+  if ((!is.null(M_dense) || !is.null(M_init)) && missing(metric)) metric <- "dense"
+  metric <- match.arg(metric)
+  dense_metric <- (metric == "dense")
+  if (sum(!is.null(M_diag), !is.null(M_dense), !is.null(M_init)) > 1)
+    stop("NUTS: supply at most one of M_diag, M_dense, M_init.")
   # Auto-select the fused backend when a fused evaluator is supplied and the
   # caller did not explicitly pick a backend.
   if (missing(backend) && !is.null(fg)) backend <- "fused"
@@ -116,24 +143,66 @@ NUTS <- function(theta, f = NULL, grad_f = NULL, n_iter,
   } else {
     if (is.null(f_ptr) || is.null(g_ptr))
       stop("NUTS: backend='xptr' requires f_ptr and g_ptr.")
+    if (dense_metric)
+      stop("NUTS: metric='dense' is not supported with backend='xptr'; ",
+           "use backend='callback' or 'fused'.")
   }
 
-  # ---- Initial metric (inv_M == diagonal of M^{-1} == momentum variances... )
-  # Convention: momentum r ~ N(0, M); inv_M = 1/M_diag. We store inv_M.
-  if (!is.null(M_diag)) {
+  # ---- Initial metric. Convention: we store inv_M == M^{-1} (momentum r ~
+  # N(0, M)). For the diagonal metric inv_M is a length-d vector of variances;
+  # for the dense metric it is a d x d covariance matrix. A supplied M_diag
+  # (diagonal) or M_dense (dense) fixes the metric to the given mass matrix M
+  # with no warmup adaptation.
+  if (!is.null(M_dense)) {
+    M_dense <- as.matrix(M_dense)
+    if (nrow(M_dense) != d || ncol(M_dense) != d)
+      stop("NUTS: M_dense must be a ", d, " x ", d, " matrix.")
+    inv_M <- solve(M_dense)          # inv_M = M^{-1} (the covariance metric)
+    inv_M <- (inv_M + t(inv_M)) / 2  # enforce exact symmetry
+    adapt_mass <- FALSE
+  } else if (!is.null(M_init)) {
+    # Dense WARM-START: inv_M is given directly as the covariance-scale metric
+    # (not inverted). Adaptation stays ON -- this is only the starting point and
+    # is overwritten by the first warmup window, so it is quality-neutral.
+    M_init <- as.matrix(M_init)
+    if (nrow(M_init) != d || ncol(M_init) != d)
+      stop("NUTS: M_init must be a ", d, " x ", d, " matrix.")
+    inv_M <- (M_init + t(M_init)) / 2  # enforce exact symmetry
+    # adapt_mass left TRUE (dense re-adaptation during warmup)
+  } else if (!is.null(M_diag)) {
     inv_M <- 1 / M_diag
     adapt_mass <- FALSE
+    if (dense_metric)
+      stop("NUTS: supply either M_diag (diagonal) or metric='dense', not both.")
+  } else if (dense_metric) {
+    inv_M <- diag(d)
   } else {
     inv_M <- rep(1, d)
   }
 
-  # A small closure to run one C++ transition regardless of backend.
+  # find_reasonable_epsilon for the active metric (diagonal vector or dense
+  # matrix inv_M). Only the callback/fused backends do the eps search.
+  find_eps <- function(theta, inv_M, eps) {
+    if (dense_metric)
+      find_reasonable_epsilon_dense(theta, f, grad_f, inv_M, eps)
+    else
+      find_reasonable_epsilon(theta, f, grad_f, inv_M, eps)
+  }
+
+  # A small closure to run one C++ transition regardless of backend. For the
+  # dense metric, inv_M is a matrix and we dispatch to the *_dense entry points.
   # Returns list(theta, accept_stat, tree_depth, n_leapfrog, divergent, energy).
   one_step <- function(theta, eps, inv_M) {
     if (backend == "callback")
-      .nuts_env$nuts_step_callback(theta, f, grad_f, eps, inv_M, max_treedepth)
+      if (dense_metric)
+        .nuts_env$nuts_step_callback_dense(theta, f, grad_f, eps, inv_M, max_treedepth)
+      else
+        .nuts_env$nuts_step_callback(theta, f, grad_f, eps, inv_M, max_treedepth)
     else if (backend == "fused")
-      .nuts_env$nuts_step_fused_callback(theta, fg, eps, inv_M, max_treedepth)
+      if (dense_metric)
+        .nuts_env$nuts_step_fused_callback_dense(theta, fg, eps, inv_M, max_treedepth)
+      else
+        .nuts_env$nuts_step_fused_callback(theta, fg, eps, inv_M, max_treedepth)
     else
       # nuts_sample_xptr with n_iter=1 acts as a single step.
       local({
@@ -147,7 +216,7 @@ NUTS <- function(theta, f = NULL, grad_f = NULL, n_iter,
 
   # ---- Find a reasonable starting step size.
   if (backend == "callback" || backend == "fused") {
-    eps <- find_reasonable_epsilon(theta, f, grad_f, inv_M, eps)
+    eps <- find_eps(theta, inv_M, eps)
   } else {
     # For xptr we just run the dual-averaging from the supplied eps; a coarse
     # search is unnecessary because adaptation converges quickly.
@@ -156,7 +225,7 @@ NUTS <- function(theta, f = NULL, grad_f = NULL, n_iter,
 
   da <- dual_avg_init(eps, delta = delta)
   sched <- make_warmup_schedule(warmup)
-  wf <- welford_init(d)
+  wf <- if (dense_metric) welford_cov_init(d) else welford_init(d)
 
   # ---- Storage.
   trace <- matrix(0, n_iter, d)
@@ -189,13 +258,15 @@ NUTS <- function(theta, f = NULL, grad_f = NULL, n_iter,
 
       # Metric adaptation inside slow windows.
       if (adapt_mass && sched$is_slow[it]) {
-        wf <- welford_update(wf, cur)
+        wf <- if (dense_metric) welford_cov_update(wf, cur)
+              else welford_update(wf, cur)
         if (sched$window_end[it]) {
-          inv_M <- welford_variance(wf)
-          wf <- welford_init(d)               # reset accumulator for next window
+          inv_M <- if (dense_metric) welford_cov_metric(wf)
+                   else welford_variance(wf)
+          wf <- if (dense_metric) welford_cov_init(d) else welford_init(d)
           # Re-find a reasonable step size under the new metric and restart DA.
           if (backend == "callback" || backend == "fused")
-            eps <- find_reasonable_epsilon(cur, f, grad_f, inv_M, da$eps)
+            eps <- find_eps(cur, inv_M, da$eps)
           else
             eps <- da$eps
           da <- dual_avg_init(eps, delta = delta)
@@ -233,8 +304,12 @@ NUTS <- function(theta, f = NULL, grad_f = NULL, n_iter,
       eps = eps_used
     ),
     eps = da$eps_bar,
+    metric = metric,
     inv_M = inv_M,
-    M_diag = 1 / inv_M,
+    # Mass matrix M = inv(inv_M). For the diagonal metric this is the vector
+    # 1/inv_M; for the dense metric it is the matrix solve(inv_M).
+    M = if (dense_metric) solve(inv_M) else 1 / inv_M,
+    M_diag = if (dense_metric) 1 / diag(inv_M) else 1 / inv_M,
     n_divergent = sum(divergent[keep]),
     mean_accept = mean(accept_stat[keep])
   )

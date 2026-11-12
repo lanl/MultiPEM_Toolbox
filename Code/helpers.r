@@ -386,6 +386,40 @@ welford_variance <- function(w) {
 }
 
 # ---------------------------------------------------------------------------
+# Dense (full-covariance) Welford accumulation for a DENSE mass matrix
+# (metric), Stan's dense_e. These mirror the diagonal welford_* above but
+# accumulate the full co-moment matrix M2 = sum (x-mean)(x-mean)'. The diagonal
+# functions are left untouched so the diagonal metric path stays bit-identical.
+# ---------------------------------------------------------------------------
+
+welford_cov_init <- function(d)
+  list(n = 0, mean = numeric(d), M2 = matrix(0, d, d))
+
+welford_cov_update <- function(w, x) {
+  w$n <- w$n + 1
+  delta <- x - w$mean
+  w$mean <- w$mean + delta / w$n
+  delta2 <- x - w$mean
+  w$M2 <- w$M2 + tcrossprod(delta, delta2)   # (x-mean_old)(x-mean_new)'
+  w
+}
+
+#' Finalize a dense Welford accumulator to a regularized covariance (= inv_M,
+#' the dense M^{-1}). Uses Stan's dense_e regularization: shrink the sample
+#' covariance toward a scaled identity, which guarantees symmetric positive
+#' definiteness even when n is small relative to the dimension.
+welford_cov_metric <- function(w) {
+  d <- length(w$mean)
+  if (w$n < 2) return(diag(d))
+  cov <- w$M2 / (w$n - 1)
+  cov <- (cov + t(cov)) / 2                   # enforce exact symmetry
+  n <- w$n
+  # Stan dense_e: (n/(n+5)) * S + 1e-3 * (5/(n+5)) * I .
+  reg <- (n / (n + 5)) * cov + (1e-3 * (5 / (n + 5))) * diag(d)
+  reg
+}
+
+# ---------------------------------------------------------------------------
 # Windowed warmup schedule (Stan-style): an initial fast interval for step-size
 # only, a sequence of expanding "slow" windows for metric estimation, and a
 # final fast interval to finalize the step size. Returns a logical/marker plan.
@@ -436,4 +470,10 @@ make_warmup_schedule <- function(warmup, init_buffer = 75, term_buffer = 50,
 find_reasonable_epsilon <- function(theta, f, grad_f, inv_M, eps = 1) {
   compile_nuts_core()
   .nuts_env$find_reasonable_epsilon_cpp(theta, f, grad_f, inv_M, eps)
+}
+
+#' find_reasonable_epsilon for a DENSE metric. inv_M is a d x d matrix (M^{-1}).
+find_reasonable_epsilon_dense <- function(theta, f, grad_f, inv_M, eps = 1) {
+  compile_nuts_core()
+  .nuts_env$find_reasonable_epsilon_dense_cpp(theta, f, grad_f, inv_M, eps)
 }

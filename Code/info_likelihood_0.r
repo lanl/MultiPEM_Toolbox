@@ -847,6 +847,12 @@ info_ll_0 = function(opt, pc)
       S_00 = S_00 - T_0b %*% S_bw %*% IS_ww %*% t(S_bw) %*% t(T_0b)
     }
     S_00 = forceSymmetric(S_00)
+    # Conditioning report (names ill-determined parameter directions). No-op if
+    # conditioning_report.r was not sourced.
+    if( exists("report_conditioning_pc") ){
+      report_conditioning_pc(S_00, pc, which="information",
+                             label="MLE information (new-event, analytic)")
+    }
     Catch = pc$tryCatch.W.E(chol(S_00))
     if( is(Catch$value,"Matrix") ){ C_00 = Catch$value
     } else {
@@ -986,6 +992,12 @@ info_ll_0 = function(opt, pc)
     if( pc$pbeta > 0 || pc$ptbeta > 0 ||
         (exists("eiv",where=pc,inherits=FALSE) && pc$eiv) ){
       S_pp = forceSymmetric(S_pp)
+      # Conditioning report (names ill-determined parameter directions). No-op
+      # if conditioning_report.r was not sourced.
+      if( exists("report_conditioning_pc") ){
+        report_conditioning_pc(S_pp, pc, which="information",
+                               label="MLE information (calp, analytic)")
+      }
       Catch = pc$tryCatch.W.E(chol(S_pp))
       if( is(Catch$value,"Matrix") ){ C_pp = Catch$value
       } else {

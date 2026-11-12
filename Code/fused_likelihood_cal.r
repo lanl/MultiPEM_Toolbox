@@ -126,6 +126,24 @@ llg_full <- function(x, pc = p_cal)
   ll  <- r$ll
   gll <- r$grad
 
+  # Reject propagation. At a reject point (non-SPD / ill-conditioned Omega, or a
+  # NaN forward model) llg_cal returns the sentinel grad = NaN (a length-1
+  # scalar) with ll = -Inf. Two things would then go wrong if we fell through:
+  # (1) the EIV block below does gll[igeiv] <- ..., which on a length-1 gll would
+  #     SILENTLY GROW it to length nsource (index expansion with NA padding); and
+  # (2) even a length-1 NaN, once wrapped by the caller as
+  #     c(grad, numeric(p_fgsn + p_A)), is length 1 + p_fgsn + p_A, which need
+  #     not divide npars -- so it still recycles against the full-length prior
+  #     gradient in lpg_full / glpost_full ("longer object length is not a
+  #     multiple of shorter").
+  # Return a FULL-LENGTH NaN gradient (length nmpars) instead: the caller's
+  # c(grad, numeric(p_fgsn + p_A)) is then exactly npars, matching glprior(x), so
+  # no recycling occurs; and the gradient is non-finite, so NUTS treats the leaf
+  # as divergent and discards it (its exact contents are irrelevant -- only its
+  # being non-finite matters). This mirrors the grad = NaN reject contract the
+  # guards in make_llg_cal establish, extended to the correct length.
+  if (!all(is.finite(gll))) return(list(ll = ll, grad = rep(NaN, pc$nmpars)))
+
   if (exists("eiv", where = pc, inherits = FALSE) && pc$eiv) {
     # gradient EIV block -- identical index arithmetic to gll_full
     xg <- x

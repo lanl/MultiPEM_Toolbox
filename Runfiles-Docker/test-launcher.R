@@ -52,6 +52,14 @@ expect_failure(c("run", "No-Such-Application/No-Such-Analysis"),
 expect_failure(c("run", event_analysis, "--stage", "invalid"), "invalid stage")
 expect_failure(c("run", event_analysis, "--workspace", "missing.RData"),
                "--workspace is only valid with --stage event")
+expect_failure(c("run", event_analysis, "--stage", "event",
+                 "--metric", "missing.RData"),
+               "--metric is only valid with --stage full or calibration")
+expect_failure(c("run", event_analysis, "--stage", "calibration",
+                 "--metric-0", "missing.RData"),
+               "--metric-0 is only valid with --stage full or event")
+expect_failure(c("run", event_analysis, "--metric"), "--metric needs a value")
+expect_failure(c("run", event_analysis, "--metric-0"), "--metric-0 needs a value")
 expect_failure(c("run", event_analysis, "--cpus", "0"),
                "--cpus must be a positive number")
 expect_failure("status", "status requires one job name")
@@ -92,6 +100,25 @@ make_existing_job(incompatible_root, event_analysis, recorded = "another/analysi
 expect_failure(
   c("run", event_analysis, "--stage", "event", "--results", incompatible_root),
   "results belong to another/analysis"
+)
+
+# Warm-start seed flags (and --workspace) are only valid when CREATING a job.
+existing_job_root <- tempfile("mpem-existing-job.")
+make_existing_job(existing_job_root, event_analysis)
+expect_failure(
+  c("run", event_analysis, "--stage", "calibration",
+    "--metric", "missing.RData", "--results", existing_job_root),
+  "--metric is only valid when creating a job"
+)
+expect_failure(
+  c("run", event_analysis, "--stage", "event",
+    "--metric-0", "missing.RData", "--results", existing_job_root),
+  "--metric-0 is only valid when creating a job"
+)
+expect_failure(
+  c("run", event_analysis, "--stage", "event",
+    "--workspace", "missing.RData", "--results", existing_job_root),
+  "--workspace is only valid when creating a job"
 )
 
 fixture_root <- tempfile("mpem-launcher-contract.")

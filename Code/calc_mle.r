@@ -71,6 +71,9 @@ calc_mle = function(p_cal,gdir,adir,f,nst=10,ncor=1,ci_lev=0.95,
   # SOURCE SUPPORTING R FUNCTIONS
   #
 
+  # diagnostics: parameter labels + information-matrix conditioning report
+  source(paste(gdir,"/param_labels.r",sep=""),local=TRUE)
+  source(paste(gdir,"/conditioning_report.r",sep=""),local=TRUE)
   # Global
   # log-likelihood functions
   source(paste(gdir,"/log_likelihood_cal.r",sep=""),local=TRUE)
