@@ -16,9 +16,16 @@
 .mpem.status
 .testmpem.status
 
-# Generated plots
+# Generated plots. Every PDF under Runfiles/ is produced by a run deck or plot
+# script; the tracked documentation PDFs live at the repo root and are
+# unaffected. Rplots.pdf and profile_ll*.pdf are also caught wherever R runs.
 Rplots.pdf
 profile_ll*.pdf
+/Runfiles/**/*.pdf
+
+# Posterior-sample and summary dumps written during analysis (postsamp_*.txt,
+# tmpi_*.txt, itmpi_*.txt, etc.). No .txt file is tracked in this repository.
+*.txt
 
 # R / Rcpp build and compiled artifacts
 *.o
@@ -33,9 +40,6 @@ sourceCpp-*/
 *.gcno
 core
 core.*
-
-# Test C run outputs (regenerated per run)
-Test/nuts_dense_metric/testC_out/
 
 # Local R environments and package checks
 .Rproj.user/
