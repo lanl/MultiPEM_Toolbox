@@ -674,12 +674,9 @@ info_ll_cal = function(opt, pc)
   if( pc$pbeta > 0 || pc$ptbeta > 0 ||
       (exists("eiv",where=pc,inherits=FALSE) && pc$eiv) ){
     S_pp = forceSymmetric(S_pp)
-    # Conditioning report (names ill-determined parameter directions). No-op if
-    # conditioning_report.r was not sourced.
-    if( exists("report_conditioning_pc") ){
-      report_conditioning_pc(S_pp, pc, which="information",
-                             label="MLE information (analytic)")
-    }
+    # (Conditioning reporting is driven unconditionally from the calc_* run
+    # drivers via report_optimum_conditioning(); this routine stays purely
+    # estimation.)
     Catch = pc$tryCatch.W.E(chol(S_pp))
     if( is(Catch$value,"Matrix") ){ C_pp = Catch$value
     } else {

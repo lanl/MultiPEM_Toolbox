@@ -72,13 +72,9 @@ obs_info_0 = function(p_cal,opt,imle=TRUE,t_cal=NULL)
     }
   }
   Hess = forceSymmetric(Hess)
-  # Conditioning report (names ill-determined parameter directions). No-op if
-  # conditioning_report.r was not sourced.
-  if( exists("report_conditioning_pc") ){
-    report_conditioning_pc(Hess, p_cal, which="information",
-                           label=if(imle) "MLE information (new-event)"
-                                  else "MAP information (new-event)")
-  }
+  # (Conditioning reporting is driven unconditionally from the calc_* run
+  # drivers via report_optimum_conditioning(); this routine stays purely
+  # estimation.)
   cHessCatch = p_cal$tryCatch.W.E(chol(Hess))
   delta = 1.e-17
   idelta = FALSE

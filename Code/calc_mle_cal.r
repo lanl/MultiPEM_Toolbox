@@ -325,6 +325,16 @@ calc_mle_cal = function(p_cal,gdir,adir,f,nst=10,ncor=1,ci_lev=0.95,
     opt_mle = make_opt(mle$par, p_cal)
     p_cal$opt_mle = opt_mle
     if( !is.null(fopt_out) ){ saveRDS(opt_mle, file=fopt_out) }
+    # Conditioning report at the MLE (diagnostic only; fires for every backend
+    # and regardless of ncalp/igrad). Uses the analytic gradient when available
+    # (gll_full is NULL under igrad=FALSE, in which case ll_full is used).
+    if( exists("report_optimum_conditioning") ){
+      report_optimum_conditioning(mle$par, p_cal,
+                                  grad_fn=p_cal$gll_full, obj_fn=p_cal$ll_full,
+                                  label="MLE information (calibration)",
+                                  labels_fn=if(exists("make_param_labels"))
+                                              make_param_labels else NULL)
+    }
     # Calculate asymptotic covariance matrix
     # for calibration inference parameters
     if( p_cal$ncalp > 0 ){

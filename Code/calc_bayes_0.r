@@ -215,6 +215,18 @@ calc_bayes_0 = function(p_cal,gdir,adir,nst=10,nburn=10000,nmcmc=20000,
     } else { qq = qq+1 }
     if( irel_tol == 2 ){ break }
   }
+  # Conditioning report at the new-event MAP (diagnostic only; fires for every
+  # backend, including NUTS/SMC where no proposal Hessian is otherwise formed).
+  # glpost_0 is NULL under igrad=FALSE, in which case lpost_0 is used. Computed
+  # in the unconstrained optimization space.
+  if( exists("report_optimum_conditioning") ){
+    report_optimum_conditioning(map$par, p_cal,
+                                grad_fn=p_cal$glpost_0,
+                                obj_fn=p_cal$lpost_0,
+                                label="MAP information (new-event)",
+                                labels_fn=if(exists("make_param_labels_0"))
+                                            make_param_labels_0 else NULL)
+  }
   if( imcmc %in% c("RAM","FME") ){
     # inverse Hessian for starting proposal distribution in
     # adaptive MCMC

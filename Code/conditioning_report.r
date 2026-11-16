@@ -125,3 +125,86 @@ report_conditioning_pc <- function(M, pc, which = "information", label = "") {
     report_conditioning(M, which = which, label = label, param_names = pnm)
   }, error = function(e) invisible(M))
 }
+
+#' Compute a diagnostic observed-information matrix at an MLE/MAP estimate and
+#' report its conditioning. This is the single entry point the run drivers call
+#' after EVERY MLE or MAP optimization, so the conditioning report fires
+#' unconditionally -- independent of the MCMC backend (RAM/FME/NUTS/SMC), of
+#' whether analytic gradients are used, and of whether downstream code builds an
+#' information matrix for its own purposes. It is purely diagnostic: it forms a
+#' fresh Hessian for reporting only and writes nothing back into `pc`, so it
+#' cannot affect any estimate, covariance, proposal, or sampler.
+#'
+#' The observed information is the negative Hessian of the log-density at the
+#' optimum. We obtain it as the Jacobian of the analytic gradient (grad_fn) --
+#' ~2*d gradient evaluations, cheap and accurate since the gradient is analytic.
+#' When no analytic gradient is available we fall back to a direct numeric
+#' Hessian of the objective (obj_fn). The matrix is formed in the SAME
+#' (unconstrained) space the optimizer/sampler works in -- that is the space
+#' whose conditioning governs MCMC mixing -- so no bound/transform Jacobian is
+#' applied here (those map covariances back to the reporting space for CIs and
+#' are irrelevant to this diagnostic).
+#'
+#' Fully guarded: any failure (missing numDeriv, non-finite gradient, etc.) is a
+#' silent no-op, so a driver call site is always safe.
+#'
+#' @param x_hat    parameter vector at the optimum (optimization space).
+#' @param pc       the p_cal environment (passed through to grad_fn/obj_fn and
+#'                 to the label builder).
+#' @param grad_fn  analytic gradient, called as grad_fn(z, pc). Preferred source.
+#' @param obj_fn   log-density objective, called as obj_fn(z, pc). Used only when
+#'                 grad_fn is NULL (e.g. igrad = FALSE).
+#' @param label    short string naming the matrix (e.g. "MAP information").
+#' @param labels_fn optional parameter-label builder, called as
+#'                 labels_fn(pc, target = d). Event drivers pass
+#'                 make_param_labels_0; defaults to make_param_labels.
+report_optimum_conditioning <- function(x_hat, pc, grad_fn = NULL,
+                                        obj_fn = NULL, label = "",
+                                        labels_fn = NULL) {
+  tryCatch({
+    if (!exists("report_conditioning")) return(invisible(NULL))
+    if (!requireNamespace("numDeriv", quietly = TRUE)) return(invisible(NULL))
+    x_hat <- as.numeric(x_hat)
+
+    # Observed information = -Hessian of the log-density at the optimum.
+    # PRIMARY path (grad_fn given, i.e. the igrad=TRUE default everywhere): the
+    # Jacobian of the analytic gradient with FORWARD differences
+    # (method="simple") -- ~d+1 gradient evals, vs ~8*d for numDeriv's default
+    # Richardson. A conditioning diagnostic only needs the eigenvalue structure
+    # (orders of magnitude, null directions), not Richardson precision, and a
+    # single gradient eval on the fused models is ~1s, so Richardson would add
+    # minutes to every MLE/MAP.
+    # FALLBACK path (grad_fn NULL, i.e. the rare igrad=FALSE case with no
+    # analytic gradient): a direct numeric Hessian of the objective. numDeriv's
+    # hessian offers only "Richardson" (robust, ~d^2 evals) or "complex" (needs
+    # a complex-differentiable function, which this log-density is not), so we
+    # use Richardson. This is O(d^2) objective evals and can be slow for large d
+    # -- acceptable because igrad=FALSE is uncommon and the whole call is a
+    # guarded no-op on failure.
+    H <- NULL
+    if (!is.null(grad_fn)) {
+      H <- tryCatch(-numDeriv::jacobian(function(z) grad_fn(z, pc), x_hat,
+                                        method = "simple"),
+                    error = function(e) NULL)
+    }
+    if (is.null(H) && !is.null(obj_fn)) {
+      H <- tryCatch(-numDeriv::hessian(function(z) obj_fn(z, pc), x_hat),
+                    error = function(e) NULL)
+    }
+    if (is.null(H) || !all(is.finite(H))) return(invisible(NULL))
+    H <- (H + t(H)) / 2                               # enforce symmetry
+    d <- nrow(H)
+
+    # Human-readable parameter labels (event path passes make_param_labels_0).
+    pnm <- NULL
+    lf <- labels_fn
+    if (is.null(lf) && exists("make_param_labels")) lf <- make_param_labels
+    if (!is.null(lf)) {
+      cand <- tryCatch(lf(pc, target = d), error = function(e) NULL)
+      if (!is.null(cand) && length(cand) == d) pnm <- cand
+    }
+
+    report_conditioning(H, which = "information", label = label,
+                        param_names = pnm)
+  }, error = function(e) invisible(NULL))
+}

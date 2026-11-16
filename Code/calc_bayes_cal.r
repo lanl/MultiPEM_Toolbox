@@ -319,6 +319,18 @@ calc_bayes_cal = function(p_cal,gdir,adir,nst=10,nburn=10000,
     } else { qq = qq+1 }
     if( irel_tol == 2 ){ break }
   }
+  # Conditioning report at the MAP (diagnostic only; fires for every backend,
+  # including NUTS/SMC where no proposal Hessian is otherwise formed). Uses the
+  # analytic posterior gradient when available (glpost_full is NULL under
+  # igrad=FALSE, in which case lpost_full is used).
+  if( exists("report_optimum_conditioning") ){
+    report_optimum_conditioning(map$par, p_cal,
+                                grad_fn=p_cal$glpost_full,
+                                obj_fn=p_cal$lpost_full,
+                                label="MAP information (calibration)",
+                                labels_fn=if(exists("make_param_labels"))
+                                            make_param_labels else NULL)
+  }
   if( imcmc %in% c("RAM","FME") ){
     # inverse Hessian for starting proposal distribution in
     # adaptive MCMC

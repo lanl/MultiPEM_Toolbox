@@ -300,6 +300,16 @@ calc_mle_0 = function(p_cal,gdir,adir,f0,nst=10,ncor=1,ci_lev=0.95,
     opt_mle = p_cal$opt_mle
     opt_mle$theta0 = mle$par
     if( !is.null(fopt_out) ){ saveRDS(opt_mle, file=fopt_out) }
+    # Conditioning report at the new-event MLE (diagnostic only; fires for every
+    # backend and regardless of igrad). gll_0 is NULL under igrad=FALSE, in which
+    # case ll_0 is used. Computed in the unconstrained optimization space.
+    if( exists("report_optimum_conditioning") ){
+      report_optimum_conditioning(mle$par, p_cal,
+                                  grad_fn=p_cal$gll_0, obj_fn=p_cal$ll_0,
+                                  label="MLE information (new-event)",
+                                  labels_fn=if(exists("make_param_labels_0"))
+                                              make_param_labels_0 else NULL)
+    }
     # Calculate asymptotic covariance matrix
     # for new event inference parameters
     if( igrad ){
