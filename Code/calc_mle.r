@@ -196,9 +196,16 @@ calc_mle = function(p_cal,gdir,adir,f,nst=10,ncor=1,ci_lev=0.95,
     p_cal$ll_eiv = ll_eiv; p_cal$gll_eiv = gll_eiv;
   }
   if( !igrad ){
-    if( p_cal$ncalp > 0 ){ p_cal$obs_info_cal = obs_info_cal }
-    if( exists("nev",where=p_cal,inherits=FALSE) && p_cal$nev ) {
+    # Mirror the nested (new-event-first) selection used when sourcing these
+    # functions above: the new-event path sources only observed_information_0.r
+    # (obs_info_0 also covers the calibration block internally when ncalp>0), the
+    # calibration-only path sources only observed_information_cal.r. Attaching
+    # them with the SAME nesting avoids referencing an obs_info_cal that was
+    # never sourced in the new-event + ncalp>0 case.
+    if( exists("nev",where=p_cal,inherits=FALSE) && p_cal$nev ){
       p_cal$obs_info_0 = obs_info_0
+    } else {
+      if( p_cal$ncalp > 0 ){ p_cal$obs_info_cal = obs_info_cal }
     }
   }
   # support functions
