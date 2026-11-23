@@ -759,6 +759,12 @@ calc_bayes_0 = function(p_cal,gdir,adir,nst=10,nburn=10000,nmcmc=20000,
                q_cal$nuts_metric = nuts_metric
                q_cal$lpost_0 = lpost_0
                q_cal$glpost_0 = glpost_0
+               # NUTS is sourced local=TRUE into this calc_bayes_0 call frame,
+               # but nuts_imp() is defined in the global environment (the deck
+               # sources calc_bayes_0.r at top level), so nuts_imp cannot see
+               # NUTS by lexical scope. Route it through q_cal, exactly as
+               # lpost_0/glpost_0 above, so it reaches the parallel worker.
+               q_cal$NUTS = NUTS
                # q_cal inherits llg_0/lpg_0 from p_cal via pc_0(); nuts_imp
                # uses the fused single-callback path when they are present.
                nuts_imp(xi[qq,],q_cal)
@@ -1033,12 +1039,16 @@ nuts_imp = function(xi,p_cal)
   # Mass-matrix type is read from p_cal$nuts_metric (set by the caller);
   # default to "dense" if unset.
   nmetric = if( is.null(p_cal$nuts_metric) ) "dense" else p_cal$nuts_metric
+  # NUTS is reached via p_cal$NUTS (attached by the caller): nuts_imp is defined
+  # in the global environment and cannot see the NUTS sourced local=TRUE into
+  # the calc_bayes_0 frame, so a bare NUTS(...) call would fail in the parallel
+  # workers ("could not find function NUTS").
   if( !is.null(p_cal$lpg_0) ){
     lpg = function(x) p_cal$lpg_0(x, p_cal)
-    NUTS(xi,fg=lpg,n_iter=p_cal$niter,
+    p_cal$NUTS(xi,fg=lpg,n_iter=p_cal$niter,
          warmup=p_cal$warmup,metric=nmetric,diagnostics=TRUE,verbose=FALSE)
   } else {
-    NUTS(xi,f=p_cal$lpost_0,grad_f=p_cal$glpost_0,n_iter=p_cal$niter,
+    p_cal$NUTS(xi,f=p_cal$lpost_0,grad_f=p_cal$glpost_0,n_iter=p_cal$niter,
          warmup=p_cal$warmup,metric=nmetric,diagnostics=TRUE,verbose=FALSE)
   }
 }
